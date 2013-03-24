@@ -1,0 +1,31 @@
+[client]
+#password       = your_password
+port            = 3307
+socket          = /tmp/tomic-mysql.sock
+
+# Here follows entries for some specific programs
+
+# The MySQL server
+[mysqld]
+port            = 3307
+socket          = /tmp/tomic-mysql.sock
+ignore_builtin_innodb
+plugin_load=innodb=ha_innodb_plugin.so
+skip-locking
+#skip-innodb
+skip-log-bin
+#log-error 	= 
+key_buffer_size = 4M
+max_allowed_packet = 1M
+table_open_cache = 64
+sort_buffer_size = 512K
+net_buffer_length = 8K
+read_buffer_size = 256K
+read_rnd_buffer_size = 512K
+myisam_sort_buffer_size = 8M
+innodb_log_file_size=200M 
+innodb_log_group_home_dir=/tmp/tomic/innodb 
+innodb_data_home_dir=/tmp/tomic/innodb  
+innodb_buffer_pool_size=2G
+innodb_flush_log_at_trx_commit=0
+tx_isolation = SERIALIZABLE

@@ -1,0 +1,18 @@
+select "Customer";
+select c_w_id, c_d_id, count(*) from customer group by 1,2;
+select "District";
+select d_w_id, d_id, count(*) from district group by 1,2;
+select "Item";
+select count(*) from item;
+select "New Orders";
+select no_w_id, no_d_id, count(*) from new_orders group by 1,2;
+select "Order Line";
+select ol_w_id, ol_d_id, count(*) from order_line group by 1,2;
+select "Orders";
+select o_w_id, o_d_id, count(*) from orders group by 1,2;
+select "Item";
+select count(*) from item ;
+select "Stock";
+select s_w_id, count(*) from stock group by 1;
+select "Warehouse";
+select w_id from warehouse;
