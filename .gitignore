@@ -1,0 +1,25 @@
+# Object files
+*.o
+
+# Eclipse stuff
+.project
+.cproject
+
+bin/
+Debug/
+Debug_uc/
+
+# Libraries
+*.lib
+*.a
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
