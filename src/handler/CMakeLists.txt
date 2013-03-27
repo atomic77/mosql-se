@@ -30,7 +30,7 @@ add_library(ha_mosql SHARED ha_tapioca.cc tapioca_util.c tpl.c )
 add_library(tapiocautil STATIC tapioca_util.c tpl.c )
 
 IF( CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" )
-  SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES COMPILE_FLAGS "-fPIC")
+  SET_TARGET_PROPERTIES(ha_mosql tapiocautil PROPERTIES COMPILE_FLAGS "-fPIC")
 ENDIF( CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" )
 
 target_link_libraries(ha_mosql ${LIBTAPIOCA_LIBRARIES} ${MYSQL_LIBRARIES})
