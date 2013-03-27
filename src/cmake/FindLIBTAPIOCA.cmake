@@ -6,8 +6,8 @@
 
 set(LIBTAPIOCA_ROOT "" CACHE STRING "Where to find the mosql storage layer libraries")
 
-find_path(LIBTAPIOCA_INCLUDE_DIR tapioca.h HINTS "${LIBTAPIOCA_ROOT}/../src/libtapioca")
-find_library(LIBTAPIOCA_LIBRARY tapioca HINTS "${LIBTAPIOCA_ROOT}/libtapioca")
+find_path(LIBTAPIOCA_INCLUDE_DIR tapioca.h HINTS "${LIBTAPIOCA_ROOT}/include")
+find_library(LIBTAPIOCA_LIBRARY tapioca HINTS "${LIBTAPIOCA_ROOT}/lib")
 
 set(LIBTAPIOCA_LIBRARIES ${LIBTAPIOCA_LIBRARY})
 set(LIBTAPIOCA_INCLUDE_DIRS ${LIBTAPIOCA_INCLUDE_DIR})
