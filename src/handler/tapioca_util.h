@@ -1,5 +1,6 @@
 //#include "bptree.h"
-#include <tapioca.h>
+#include <tapioca/tapioca.h>
+#include <tapioca/tapioca_btree.h>
 #include <stdio.h>
 
 // FIXME These names are now not correct, but legacy references still exist

@@ -7,7 +7,8 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <string.h>
-#include <tapioca.h>
+#include <tapioca/tapioca.h>
+#include <tapioca/tapioca_btree.h>
 #include <stdio.h>
 
 typedef struct serialize_struct
