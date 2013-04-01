@@ -1,4 +1,5 @@
-#include "tapioca.h"
+#include <tapioca/tapioca.h>
+#include <tapioca/tapioca_btree.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
