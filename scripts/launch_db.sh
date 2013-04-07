@@ -1,7 +1,7 @@
 #!/bin/bash
 BASEDIR=/home/atomic/local/mysql
-BUILDDIR=/home/atomic/branches/buffering/src/.libs
-LIB=libTapiocaMySQL.so
+BUILDDIR=/home/atomic/local/mosql-se/
+LIB=libmosqlse.so
 MYSQLCNF=my.cnf
 SOCKET=/tmp/mysql-debug.sock
 TS=`date +%s`
@@ -20,13 +20,14 @@ else
 	$BASEDIR/bin/mysqladmin --socket $SOCKET -u root shutdown
 fi
 
-cp $MYSQLCNF $BASEDIR
+cp $BUILDDIR/config/$MYSQLCNF $BASEDIR
+
 if [ -e $BASEDIR/lib/mysql/plugin ]; then # 5.1 build
 	echo "Copying to 5.1 plugin dir"
-	cp $BUILDDIR/$LIB $BASEDIR/lib/mysql/plugin
+	cp $BUILDDIR/lib/$LIB $BASEDIR/lib/mysql/plugin
 else 
-	echo "Copying to 5.5 plugin dir"
-	cp $BUILDDIR/$LIB $BASEDIR/lib/plugin/
+	echo "Copying to 5.5+ plugin dir"
+	cp $BUILDDIR/lib/$LIB $BASEDIR/lib/plugin/
 fi
 
 set -e

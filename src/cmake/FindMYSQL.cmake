@@ -9,7 +9,7 @@ set(MYSQL_ROOT "" CACHE STRING "BerkeleyDB root directory")
 
 #find_path(MYSQL_INCLUDE_DIR mysql_version.h HINTS "${MYSQL_ROOT}/include/mysql")
 #find_path(MYSQL_INCLUDE_DIR mysql_version.h HINTS "${MYSQL_ROOT}/include ${MYSQL_ROOT}/include/mysql")
-find_library(MYSQL_LIBRARY mysqld mysqld.a HINTS "${MYSQL_ROOT}/lib")
+find_library(MYSQL_LIBRARY mysqld mysqld.a HINTS "${MYSQL_ROOT}/lib" "${MYSQL_ROOT}/lib/mysql")
 
 #message(STATUS "Using ${MYSQL_INCLUDE_DIR} for base mysql includes")
 set(MYSQL_LIBRARIES ${MYSQL_LIBRARY})
