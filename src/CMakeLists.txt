@@ -28,3 +28,6 @@ SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g -static-libgcc -fno-omit-frame-pointer -f
 
 add_subdirectory(handler)
 add_subdirectory(tests)
+
+INSTALL(FILES ../scripts/launch_db.sh DESTINATION scripts)
+INSTALL(FILES ../config/my.cnf DESTINATION config)
