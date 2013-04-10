@@ -12,7 +12,8 @@ include_directories(${MYSQLSRC_INCLUDE_DIRS}/regex)
 # Fix the naming convention of files in here (or move finally everything to 
 # google test framework) so that we don't have to manually specify what to build
 
-SET (TEST_SOURCES bench_mysql_base.c  bptree_concurrent.c  bptree_dump.c bptree_perf.c tapioca_bptree_check.c tapioca_trace_recover.c bptree_basic.c bptree_cursor.c bptree_op_test.c tapioca_storage.c test_mysql_multi_open.c)
+#SET (TEST_SOURCES bench_mysql_base.c  bptree_concurrent.c  bptree_dump.c bptree_perf.c tapioca_bptree_check.c tapioca_trace_recover.c bptree_basic.c bptree_cursor.c bptree_op_test.c tapioca_storage.c test_mysql_multi_open.c)
+SET (TEST_SOURCES  bptree_concurrent.c  bptree_dump.c bptree_perf.c tapioca_bptree_check.c tapioca_trace_recover.c bptree_basic.c bptree_cursor.c bptree_op_test.c tapioca_storage.c )
 
 ## TODO There is still a linking issue with some of the test cases, it may make
 ## more sense to separate out the 'utility' stuff into a separate directory and library
