@@ -269,17 +269,23 @@ static int reload_tapioca_bptree_metadata()
 	rv = tapioca_get(th_global, (uchar *) bpt_meta_key,
 			(int) strlen(bpt_meta_key), buf, TAPIOCA_LARGE_BUFFER);
 
-	uint16_t num_bptrees;
-	tapioca_bptree_info *bpt_map = unmarshall_bptree_info(buf, &num_bptrees);
-	DBUG_PRINT( "tapioca_init_func",
-			("buf_sz %d , unmarshalled %d bptrees, inserting to glob meta hash",
-			rv, num_bptrees));
-
-	if (bpt_map == NULL)
+	char *fmt = tpl_peek(TPL_MEM, buf, TAPIOCA_LARGE_BUFFER);
+	
+	if (fmt == NULL)
 	{
+		DBUG_PRINT("ha_tapioca", ("No metadata found, assuming fresh system"));
 		DBUG_RETURN(0);
 	}
+	
+	assert(strncmp(fmt, bpt_meta_key, strnlen(bpt_meta_key, 100)) == 0);
+	free(fmt);
+	
+	uint16_t num_bptrees;
+	tapioca_bptree_info *bpt_map = unmarshall_bptree_info(buf, &num_bptrees);
 
+	DBUG_PRINT( "ha_tapioca",
+			("unmarshalled %d bptrees, inserting to glob meta hash", num_bptrees));
+	
 	for (int i = 0; i < num_bptrees; i++)
 	{
 		if (bpt_map->is_active)
@@ -292,7 +298,7 @@ static int reload_tapioca_bptree_metadata()
 		}
 		bpt_map++;
 	}
-	DBUG_PRINT( "tapioca_init_func",
+	DBUG_PRINT( "ha_tapioca",
 			("unmarshalled %ul bptrees and inserted to metahash",
 					tapioca_bptrees.records));
 
