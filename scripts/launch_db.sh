@@ -1,4 +1,14 @@
 #!/bin/bash
+# Script for launching mysqld process with mosql-se shared lib
+PROGNAME=${0##*/} 
+# Options for script, in order given in LONGOPTS
+CLEARDB="n"
+KILL="n"
+NOREC="n"
+
+SHORTOPTS="hb:tksl:"
+LONGOPTS="help,basedir:,trace,kill-all,shutdown,launch-in:"
+
 BASEDIR=/home/atomic/local/mysql
 BUILDDIR=/home/atomic/local/mosql-se/
 LIB=libmosqlse.so
@@ -6,17 +16,65 @@ MYSQLCNF=my.cnf
 SOCKET=/tmp/mysql-debug.sock
 TS=`date +%s`
 TRACEDIR=/tmp
-#DEBUGPARAMS=d:t:i:O,$TRACEDIR/mysql-$TS.trace
-#DEBUGPARAMS=d:g:n:t:i:O,$TRACEDIR/mysql-$TS.trace
-#DEBUGPARAMS=d,ha_tapioca:g:n:t:i:O,$TRACEDIR/mysql-$TS.trace
-#DEBUGPARAMS=d:f,open:i:O,$TRACEDIR/mysql-$TS.trace
+TRACE="n"
+LAUNCHWITH="nohup" 
+DEBUGPARAMS=d:t:i:O,$TRACEDIR/mysql-$TS.trace
 DEBUGPARAMS=
+FINALPARAMS=
 
+usage () {
+	echo "$0 <options>"
+	echo "Long options: $LONGOPTS"
+	echo "Short options: $LONGOPTS"
+}
 
-if [ "$1" = "-k" ]; then 
-	pkill -9 -f mysqld
-	rm -rf $BASEDIR/data/test1
+check_env () {
+	if [ ! -e lib/$LIB ]; then
+		echo "Could not find $LIB library in ./lib"
+		echo "Please run this script from the root mosql-se install folder"
+		exit 1
+	fi
+}
+
+ARGS=$(getopt -s bash --options $SHORTOPTS  \
+  --longoptions $LONGOPTS --name $PROGNAME -- "$@" )
+
+eval set -- "$ARGS"
+
+while true; do
+   case $1 in
+      -h|--help)
+         usage
+         exit 0
+         ;;
+      -b|--basedir) 
+		shift
+		BASEDIR=$1
+		;;
+      -t|--trace) 
+		EXTRAPARAMS="$EXTRAPARAMS --debug=$DEBUGPARAMS"
+		;;
+      -k|--kill-all) 
+		KILL="y"
+		;;
+      *)
+         break
+         ;; 
+	esac
+	shift
+done
+
+check_env
+
+if [ "$KILL" = "y" ]; then 
+	echo "Giving mysqld 2 seconds to shutdown with SIGTERM"
+	killall -q -u atomic mysqld mysqld_safe
+	sleep 2
+	echo "Now -9'ing."
+	killall -q -9 -u atomic mysqld mysqld_safe
+	#rm -rf $BASEDIR/data/test1
 else
+	echo "Shutting down mysqld with mysqladmin"
 	$BASEDIR/bin/mysqladmin --socket $SOCKET -u root shutdown
 fi
 
@@ -32,11 +90,10 @@ fi
 
 set -e
 
+#BASEPARAMS="--defaults-file=$BASEDIR/$MYSQLCNF  --skip-syslog --basedir=$BASEDIR --datadir=$BASEDIR/data --log-error=$BASEDIR/debug.err --lower_case_table_names=1 " #  2> /dev/null &" 
+BASEPARAMS="--defaults-file=$BASEDIR/$MYSQLCNF  --basedir=$BASEDIR --datadir=$BASEDIR/data --log-error=$BASEDIR/debug.err --lower_case_table_names=1 " #  2> /dev/null &" 
+
 cd $BASEDIR
-#bin/mysqld_safe --basedir=$BASEDIR --datadir=$BASEDIR/data --defaults-file=$BASEDIR/$MYSQLCNF 
-#xterm -e "bin/mysqld_safe --defaults-file=$BASEDIR/$MYSQLCNF --debug=$DEBUGPARAMS --skip-syslog --basedir=$BASEDIR --datadir=$BASEDIR/data --log-error=$BASEDIR/debug.err  " &
-#xterm -e "bin/mysqld_safe --defaults-file=$BASEDIR/$MYSQLCNF  --skip-syslog --basedir=$BASEDIR --datadir=$BASEDIR/data --log-error=$BASEDIR/debug.err --debug=$DEBUGPARAMS --lower_case_table_names=1  " 2> /dev/null &
-nohup bin/mysqld_safe --defaults-file=$BASEDIR/$MYSQLCNF  --skip-syslog --basedir=$BASEDIR --datadir=$BASEDIR/data --log-error=$BASEDIR/debug.err --debug=$DEBUGPARAMS --lower_case_table_names=1   2> /dev/null &
-#xterm -e "bin/mysqld_safe --defaults-file=$BASEDIR/$MYSQLCNF  --skip-syslog --basedir=$BASEDIR --datadir=$BASEDIR/data --log-error=$BASEDIR/debug.err  --lower_case_table_names=1   " 2> /dev/null &
-#bin/mysqld_safe --defaults-file $BASEDIR/$MYSQLCNF 
+nohup bin/mysqld_safe $BASEPARAMS $EXTRAPARAMS 2> /dev/null &
+
 
