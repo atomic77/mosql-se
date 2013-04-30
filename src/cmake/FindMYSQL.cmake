@@ -7,19 +7,16 @@
 
 set(MYSQL_ROOT "" CACHE STRING "BerkeleyDB root directory")
 
-#find_path(MYSQL_INCLUDE_DIR mysql_version.h HINTS "${MYSQL_ROOT}/include/mysql")
-#find_path(MYSQL_INCLUDE_DIR mysql_version.h HINTS "${MYSQL_ROOT}/include ${MYSQL_ROOT}/include/mysql")
-find_library(MYSQL_LIBRARY mysqld mysqld.a HINTS "${MYSQL_ROOT}/lib" "${MYSQL_ROOT}/lib/mysql")
+find_library(MYSQL_LIBRARY mysqlclient HINTS "${MYSQL_ROOT}/lib" "${MYSQL_ROOT}/lib/mysql")
+find_library(MYSQL_LIBRARY_R mysqlclient_r HINTS "${MYSQL_ROOT}/lib" "${MYSQL_ROOT}/lib/mysql")
 
 #message(STATUS "Using ${MYSQL_INCLUDE_DIR} for base mysql includes")
-set(MYSQL_LIBRARIES ${MYSQL_LIBRARY})
+set(MYSQL_LIBRARIES ${MYSQL_LIBRARY} ${MYSQL_LIBRARY_R}   )
 set(MYSQL_INCLUDE_DIRS ${MYSQL_INCLUDE_DIR})
 
 include(FindPackageHandleStandardArgs)
 # handle the QUIETLY and REQUIRED arguments and set LIBXML2_FOUND to TRUE
 # if all listed variables are TRUE
-#find_package_handle_standard_args(MYSQL DEFAULT_MSG MYSQL_LIBRARY MYSQL_INCLUDE_DIR)
 find_package_handle_standard_args(MYSQL DEFAULT_MSG MYSQL_LIBRARY )
 
-#mark_as_advanced(MYSQL_INCLUDE_DIR MYSQL_LIBRARY)
 mark_as_advanced(MYSQL_LIBRARY)
