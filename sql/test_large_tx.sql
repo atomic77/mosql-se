@@ -4,7 +4,7 @@ CREATE SCHEMA test1;
 USE test1;
 
 create table c (i int, t varchar(3000), 
-primary key (i)) engine = tapioca;
+primary key (i)) ENGINE=MoSQL;
 
 
 SET AUTOCOMMIT=0;

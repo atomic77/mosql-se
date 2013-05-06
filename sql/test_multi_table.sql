@@ -8,7 +8,7 @@ create table test_pk_complex (
  v varchar(50),
  d datetime,
  deca decimal(10,4), 
- primary key (i)) engine = tapioca;
+ primary key (i)) ENGINE=MoSQL;
  
  insert into test_pk_complex values (10, "asdf","adsfasfdasdf","2011-02-05 00:00:00", 10.4);
  insert into test_pk_complex values (20, "fdsa","fdssfd","2011-01-02 00:00:00", 3210.4);
@@ -23,7 +23,7 @@ drop table if exists test_pk_complex2;
 create table test_tab2 (
  i integer not null,
  v varchar(50),
- primary key (i)) engine = tapioca;
+ primary key (i)) ENGINE=MoSQL;
  
 insert into test_tab2 values (1,'asdfa');
 insert into test_tab2 values (2,'asdfa');

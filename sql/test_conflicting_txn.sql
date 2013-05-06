@@ -5,7 +5,7 @@ DROP SCHEMA test1;
 CREATE SCHEMA test1;
 USE test1;
 
-create table t (i int, v text, primary key (i)) engine = tapioca;
+create table t (i int, v text, primary key (i)) ENGINE=MoSQL;
 set autocommit = off;
 
 begin;

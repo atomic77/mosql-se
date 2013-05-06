@@ -4,7 +4,7 @@ USE test1;
 
 
 create table c (i int, t varchar(30), 
-primary key (i)) engine = tapioca;
+primary key (i)) ENGINE=MoSQL;
 
 
 

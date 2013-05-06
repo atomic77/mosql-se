@@ -3,7 +3,7 @@ DROP SCHEMA test1;
 CREATE SCHEMA test1;
 USE test1;
 
-create table t (a int, b int, c int, v text, primary key (a,b,c)) engine = tapioca;
+create table t (a int, b int, c int, v text, primary key (a,b,c)) ENGINE=MoSQL;
 
 insert into t values (1,2,2,'a');
 insert into t values (1,2,4,'b');
@@ -32,7 +32,7 @@ CREATE SCHEMA test1;
 USE test1;
 
 
-create table v (a char(4), b char(4), v text, primary key (a,b)) engine = tapioca;
+create table v (a char(4), b char(4), v text, primary key (a,b)) ENGINE=MoSQL;
 
 insert into v values ('aaaa','yyyy','a');
 insert into v values ('aaaa','yyzz','a');
@@ -42,7 +42,7 @@ insert into v values ('aaac','tttt','a');
 
 
 
-create table t (a int, b int, c int, v text, primary key (a,b,c)) engine = tapioca;
+create table t (a int, b int, c int, v text, primary key (a,b,c)) ENGINE=MoSQL;
 
 insert into t values (2,3,3,'e');
 insert into t values (3,3,3,'f');

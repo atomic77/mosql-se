@@ -8,7 +8,7 @@ USE test1;
 
 CREATE TABLE s
 (i int, t char(16), 
-primary key (i,t)) engine = tapioca;
+primary key (i,t)) ENGINE=MoSQL;
 
 insert into s values (254, 'ABCD');
 insert into s values (254*254, 'ABCDE');
@@ -28,7 +28,7 @@ DROP TABLE IF EXISTS t;
 
 CREATE TABLE t 
 (t char(8), i int, u char(6), j int, primary key (t,u)) 
-engine = tapioca;
+ENGINE=MoSQL;
 
 
 INSERT INTO t VALUES ('aaaaaaaa', 123,  'AAAA', 432);
@@ -57,7 +57,7 @@ c2 CHAR(11),
 j INT NOT NULL, 
 k INT NOT NULL,
 PRIMARY KEY (c1,c2),
-KEY `idx_1` (j,k,c2)) ENGINE = TAPIOCA;
+KEY `idx_1` (j,k,c2)) ENGINE=MoSQL;
 
 INSERT INTO u VALUES ('AAAABBBBCCCCDDDDE', 123,  'ffffgggghhh', 432, 976);
 INSERT INTO u VALUES ('AAAABBBBCCCCDDDEE', 123,  'ffffgggghhh', 412, 76);
@@ -89,7 +89,7 @@ i INT NOT NULL,
 j INT NOT NULL,
 PRIMARY KEY (i),
 KEY `implicit_pk` (j)
-) ENGINE = TAPIOCA;
+) ENGINE=MoSQL;
 
 -- Generate script: 
 -- rm /tmp/ins.sql; for i in `seq 1 1000`; 
@@ -117,7 +117,7 @@ i CHAR(3) NOT NULL,
 j CHAR(3) NOT NULL,
 PRIMARY KEY (i),
 KEY `implicit_pk` (j)
-) ENGINE = TAPIOCA;
+) ENGINE=MoSQL;
 
 INSERT INTO v VALUES ('aaa', 'aaa' ); 
 INSERT INTO v VALUES ('aab', 'aaa' ); 

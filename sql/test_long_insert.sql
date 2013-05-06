@@ -6,7 +6,7 @@ USE test1;
 
 
 create table c (i int, t varchar(30), 
-primary key (i)) engine = tapioca;
+primary key (i)) ENGINE=MoSQL;
 
 INSERT INTO c VALUES (1,'fdsafdsa');
 INSERT INTO c VALUES (2,'fdsafdsa');
@@ -2050,7 +2050,7 @@ INSERT INTO c VALUES (2039,'fdsafdsa');
 INSERT INTO c VALUES (2040,'fdsafdsa');
 
 
-create table a (i int, primary key (i)) engine = tapioca;
+create table a (i int, primary key (i)) ENGINE=MoSQL;
 INSERT INTO a VALUES (1);
 INSERT INTO a VALUES (2);
 INSERT INTO a VALUES (3);
@@ -2322,7 +2322,7 @@ INSERT INTO a VALUES (268);
 
 
 create table b (i int, t varchar(30), 
-primary key (i)) engine = tapioca;
+primary key (i)) ENGINE=MoSQL;
 
 
 INSERT INTO b VALUES (1,'asdfasdf');

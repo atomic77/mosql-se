@@ -3,8 +3,8 @@ DROP SCHEMA test1;
 CREATE SCHEMA test1;
 USE test1;
 
-CREATE TABLE t1 (c int, primary key (c)) ENGINE = Tapioca;
-CREATE TABLE t2 (c float, primary key (c)) ENGINE = Tapioca;
+CREATE TABLE t1 (c int, primary key (c)) ENGINE=MoSQL;
+CREATE TABLE t2 (c float, primary key (c)) ENGINE=MoSQL;
 
 INSERT INTO t1 VALUES (1),(2),(3),(4),(5);
 
