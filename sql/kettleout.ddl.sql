@@ -11,6 +11,6 @@ CREATE TABLE kettleout
 , k INT
 , k_10 INT
 , PRIMARY KEY(k_10,k)
-) ENGINE= TAPIOCA
+) ENGINE=MoSQL
 ;
 

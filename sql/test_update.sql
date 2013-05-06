@@ -4,7 +4,7 @@ DROP SCHEMA test1;
 CREATE SCHEMA test1;
 USE test1;
 
-create table t (a int, v text, primary key (a)) engine = tapioca;
+create table t (a int, v text, primary key (a)) ENGINE=MoSQL;
 
 
 insert into t values (1,'a');
@@ -19,7 +19,7 @@ select * from t;
 
 
 
-create table district (a int, v text, primary key (a)) engine = tapioca;
+create table district (a int, v text, primary key (a)) ENGINE=MoSQL;
 
 
 insert into district values (1,'a');

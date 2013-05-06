@@ -2,10 +2,10 @@ DROP SCHEMA IF EXISTS test1;
 CREATE SCHEMA test1;
 USE test1;
 
-create table test1 (i integer , primary key (i)) engine = tapioca;
-create table test2 (i integer , primary key (i)) engine = tapioca;
+create table test1 (i integer , primary key (i)) ENGINE=MoSQL;
+create table test2 (i integer , primary key (i)) ENGINE=MoSQL;
 
--- create table test3 (i integer , primary key (i)) engine = tapioca;
+-- create table test3 (i integer , primary key (i)) ENGINE=MoSQL;
 
 insert into test1 values (1);
 insert into test2 values (1);

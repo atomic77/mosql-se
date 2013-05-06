@@ -4,11 +4,11 @@ CREATE SCHEMA test1;
 USE test1;
 
 create table s (i int, t varchar(30), 
-primary key (i)) engine = tapioca;
+primary key (i)) ENGINE=MoSQL;
 
 
 create table t (i int, t varchar(30), 
-primary key (i)) engine = tapioca;
+primary key (i)) ENGINE=MoSQL;
 
 SET AUTOCOMMIT = 0;
 BEGIN;

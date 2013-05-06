@@ -6,7 +6,7 @@ create table test_mpart (
  a integer not null,
  b integer not null,
  v varchar(50),
- primary key (a,b)) engine = tapioca;
+ primary key (a,b)) ENGINE=MoSQL;
  
 insert into test_mpart values (1,1,'a');
 insert into test_mpart values (1,2,'b');
@@ -24,7 +24,7 @@ create table test_midx (
  c integer not null,
  v varchar(50),
  primary key (a,b),
- key idx1 (b,c)) engine = tapioca;
+ key idx1 (b,c)) ENGINE=MoSQL;
  
 insert into test_midx values (1,1,2,'asdf');
 insert into test_midx values (1,2,3,'asdf');
@@ -40,7 +40,7 @@ create table test_mpart2 (
  b integer not null,
  c char(4) not null,
  v varchar(50),
- primary key (a,b,c)) engine = tapioca;
+ primary key (a,b,c)) ENGINE=MoSQL;
  
 insert into test_mpart2 values (1,1,'asdf', 'blah');
 insert into test_mpart2 values (1,2,'asdf', 'blah');
@@ -57,7 +57,7 @@ create table test_mpart2 (
  b integer not null,
  c char(4) not null,
  v varchar(50),
- primary key (a,b,c)) engine = tapioca;
+ primary key (a,b,c)) ENGINE=MoSQL;
  
  create index `asdfa` on test_mpart2 (b,c);
  
@@ -72,7 +72,7 @@ d int not null,
 v text, 
 primary key (a,b,c),
 key (c,d)
-) engine = tapioca;
+) ENGINE=MoSQL;
 
 insert into t values (1,2,2,1,'a');
 insert into t values (1,2,4,1,'b');
@@ -110,7 +110,7 @@ v text,
 primary key (a,b,c),
 key (c,d),
 key (e)
-) engine = tapioca;
+) ENGINE=MoSQL;
 
 insert into v values (1,2,2,1,'a', 'a');
 insert into v values (1,2,4,1,'a', 'b');
