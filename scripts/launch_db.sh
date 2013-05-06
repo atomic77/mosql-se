@@ -6,8 +6,8 @@ CLEARDB="n"
 KILL="n"
 NOREC="n"
 
-SHORTOPTS="hb:tksl:"
-LONGOPTS="help,basedir:,trace,kill-all,shutdown,launch-in:"
+SHORTOPTS="hb:tksp:l:"
+LONGOPTS="help,basedir:,trace,kill-all,shutdown,purge-schema-dir:,launch-in:"
 
 BASEDIR=/home/atomic/local/mysql
 BUILDDIR=/home/atomic/local/mosql-se/
@@ -21,11 +21,13 @@ LAUNCHWITH="nohup"
 DEBUGPARAMS=d:t:i:O,$TRACEDIR/mysql-$TS.trace
 DEBUGPARAMS=
 FINALPARAMS=
+PURGESCHEMADIR=
+DOPURGESCHEMA="n"
 
 usage () {
 	echo "$0 <options>"
 	echo "Long options: $LONGOPTS"
-	echo "Short options: $LONGOPTS"
+	echo "Short options: $SHORTOPTS"
 }
 
 check_env () {
@@ -47,6 +49,11 @@ while true; do
          usage
          exit 0
          ;;
+      -p|--purge-schema-dir) 
+		shift
+		DOPURGESCHEMA="y"
+		PURGESCHEMADIR=$1
+		;;
       -b|--basedir) 
 		shift
 		BASEDIR=$1
@@ -79,6 +86,13 @@ else
 fi
 
 cp $BUILDDIR/config/$MYSQLCNF $BASEDIR
+
+if [ "$DOPURGESCHEMA" = "y" ]; then
+	if [ -e $BASEDIR/data/$PURGESCHEMADIR/db.opt ]; then
+		echo "Blowing away $BASEDIR/data/$PURGESCHEMADIR"
+		rm -rf $BASEDIR/data/$PURGESCHEMADIR
+	fi
+fi
 
 if [ -e $BASEDIR/lib/mysql/plugin ]; then # 5.1 build
 	echo "Copying to 5.1 plugin dir"
