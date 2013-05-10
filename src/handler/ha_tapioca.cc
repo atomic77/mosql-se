@@ -1,18 +1,3 @@
-/* Copyright (C) 2003 MySQL AB
-
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; version 2 of the License.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
-
 /**
  @file ha_tapioca.cc
  @brief
@@ -2125,21 +2110,17 @@ int ha_tapioca::create(const char *name, TABLE *table_arg,
 	}
 	else if (rv == 0 || table_id <= -1)
 	{ // This is a new/deleted table in the cluster
-		// TODO This logic has some potential problems
 		fn_pos = 1;
 		const char* str = TAPIOCA_TABLE_AUTOINC_KEY;
 
-		table_id = -1;
+		table_id = 0;
 		int tries = 0;
 		rv = -1;
+		
+		tapioca_get(th_global, (char *)str, strlen(str), &table_id, sizeof(int32_t));
+		table_id++;
+		tapioca_put(th_global, (char *)str, strlen(str), &table_id, sizeof(int32_t));
 
-		while (tries < 3 && rv < 0)
-		{
-			rv = get_next_autoinc(th_global, str, strlen(str), &table_id);
-			tries++;
-			if (rv < 0) usleep(100 * 1000);
-		}
-		if (rv < 0) goto create_exception;
 		fn_pos = 2;
 
 		printf("Got next table_id %d for %s tabname len %d, %d tries, rv %d\n",
@@ -2170,6 +2151,9 @@ int ha_tapioca::create(const char *name, TABLE *table_arg,
 			ki++;
 		}
 		fflush(stdout);
+		fn_pos = 3;
+		rv = tapioca_commit(th_global);
+		if (rv < 0) goto create_exception;
 	}
 	else
 	{
@@ -2190,11 +2174,11 @@ int ha_tapioca::create_new_bpt_id(const char *table_name,
 		const char *index_name, int16_t is_pk)
 {
 	DBUG_ENTER("ha_tapioca::create_new_bpt_id");
-	int rv, mk = 0, autoinc;
+	int rv, mk = 0;
 	int tries = 0, rv_p;
 	const char* bpt_meta_key = TAPIOCA_BPTREE_META_KEY;
 	void *buf;
-	tapioca_bptree_id tbps_ignored;
+	tapioca_bptree_id prev_bpt_id = -1, tbps_ignored;
 
 	tapioca_bptree_info *bpt_info = (tapioca_bptree_info *) my_malloc(
 			sizeof(tapioca_bptree_info), MYF(0));
@@ -2210,16 +2194,11 @@ int ha_tapioca::create_new_bpt_id(const char *table_name,
 
 	const char* str = TAPIOCA_BPTREE_AUTOINC_KEY;
 	rv = -1;
-
-	while (tries < 3 && rv < 0)
-	{
-		rv = get_next_autoinc(th_global, str, strlen(str), &autoinc);
-		tries++;
-		if (rv < 0) usleep(100 * 1000);
-	}
-	if (rv < 0) goto create_exception;
-
-	bpt_info->bpt_id = autoinc;
+	
+	tapioca_get(th_global,(char *)str, strlen(str), &prev_bpt_id, sizeof(tapioca_bptree_id));
+	if (prev_bpt_id < 0) prev_bpt_id = 0;
+	bpt_info->bpt_id = prev_bpt_id +1;
+	tapioca_put(th_global,(char *)str, strlen(str), &bpt_info->bpt_id, sizeof(tapioca_bptree_id));
 	strncpy(bpt_info->full_index_name, full_index_name, 128);
 
 	mk = 1;
@@ -2257,16 +2236,9 @@ int ha_tapioca::create_new_bpt_id(const char *table_name,
 	int32_t bsize;
 	buf = marshall_bptree_info(&bsize);
 	rv = -1;
-	while (tries < 3 && rv < 0)
-	{
-		rv_p = tapioca_put(th_global, (uchar *) bpt_meta_key,
+	tapioca_put(th_global, (uchar *) bpt_meta_key,
 				(int) strlen(bpt_meta_key), buf, bsize);
-		rv = tapioca_commit(th_global);
-		tries++;
-		if (rv < 0) usleep(250 * 1000);
-	}
 
-	if (rv < 0) goto create_exception;
 
 	DBUG_RETURN(0);
 
