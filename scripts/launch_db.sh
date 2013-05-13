@@ -9,8 +9,8 @@ NOREC="n"
 SHORTOPTS="hb:tksp:l:"
 LONGOPTS="help,basedir:,trace,kill-all,shutdown,purge-schema-dir:,launch-in:"
 
-BASEDIR=/home/atomic/local/mysql
-BUILDDIR=/home/atomic/local/mosql-se/
+BASEDIR=~/local/mysql
+BUILDDIR=~/local/mosql-se/
 LIB=libmosqlse.so
 MYSQLCNF=my.cnf
 SOCKET=/tmp/mysql-debug.sock
@@ -75,10 +75,10 @@ check_env
 
 if [ "$KILL" = "y" ]; then 
 	echo "Giving mysqld 2 seconds to shutdown with SIGTERM"
-	killall -q -u atomic mysqld mysqld_safe
+	killall -q -u $USER mysqld mysqld_safe
 	sleep 2
 	echo "Now -9'ing."
-	killall -q -9 -u atomic mysqld mysqld_safe
+	killall -q -9 -u $USER mysqld mysqld_safe
 	#rm -rf $BASEDIR/data/test1
 else
 	echo "Shutting down mysqld with mysqladmin"
