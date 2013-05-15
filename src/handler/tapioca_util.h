@@ -4,8 +4,7 @@
 #include <stdio.h>
 
 // FIXME These names are now not correct, but legacy references still exist
-#define TAPIOCA_MAX_VALUE_BUFFER 64000
-#define TAPIOCA_LARGE_BUFFER 64000 // stay a bit under 64k
+#define TAPIOCA_MAX_VALUE_SIZE 256*1000
 #define TAPIOCA_POOL_SIZE 10
 
 // Important metadata keys we store in tapioca

@@ -21,8 +21,8 @@
 int test_empty_bptree()
 {
 	int rv1, rv2;
-	char k[BPTREE_VALUE_SIZE];
-	char v[BPTREE_VALUE_SIZE];
+	char k[256000];
+	char v[256000];
 	int ksize, vsize;
 
 	tapioca_handle *th = tapioca_open("127.0.0.1", 5555);
