@@ -249,12 +249,12 @@ static int reload_tapioca_bptree_metadata()
 			(my_hash_get_key) tapioca_bptree_info_get_key, 0, 0);
 	const char* bpt_meta_key = TAPIOCA_BPTREE_META_KEY;
 	// TODO We will fail badly if this buffer goes > 64k, max tapioca buf size
-	uchar buf[TAPIOCA_LARGE_BUFFER];
-	bzero(buf, TAPIOCA_LARGE_BUFFER);
+	uchar buf[TAPIOCA_MAX_VALUE_SIZE];
+	bzero(buf, TAPIOCA_MAX_VALUE_SIZE);
 	rv = tapioca_get(th_global, (uchar *) bpt_meta_key,
-			(int) strlen(bpt_meta_key), buf, TAPIOCA_LARGE_BUFFER);
+			(int) strlen(bpt_meta_key), buf, TAPIOCA_MAX_VALUE_SIZE);
 
-	char *fmt = tpl_peek(TPL_MEM, buf, TAPIOCA_LARGE_BUFFER);
+	char *fmt = tpl_peek(TPL_MEM, buf, TAPIOCA_MAX_VALUE_SIZE);
 	
 	if (fmt == NULL)
 	{
@@ -578,7 +578,7 @@ int ha_tapioca::write_index_data(uchar *buf, uchar *pk_buf, int *pk_len,
     int fn_pos = 0, rv;
     int num_keys = table->s->keys; // For now assume this is one
     int32_t dummy = 0;
-	uchar v[TAPIOCA_MAX_VALUE_BUFFER];
+	uchar v[TAPIOCA_MAX_VALUE_SIZE];
     tapioca_bptree_id *tbptr;
     tapioca_handle *th;
 
@@ -601,7 +601,7 @@ int ha_tapioca::write_index_data(uchar *buf, uchar *pk_buf, int *pk_len,
 		// We will write one tapioca value per index
 		KEY_PART_INFO *key_part = key_info->key_part;
 		KEY_PART_INFO *key_end = key_part + key_info->key_parts;
-		bzero(v, TAPIOCA_MAX_VALUE_BUFFER);
+		bzero(v, TAPIOCA_MAX_VALUE_SIZE);
 		uchar *vptr = v;
 		bool is_null;
 		int key_len = 0;
@@ -634,11 +634,13 @@ int ha_tapioca::write_index_data(uchar *buf, uchar *pk_buf, int *pk_len,
 		{
 			if(is_row_in_node)
 			{
+				fn_pos = 3;
 				rv = tapioca_bptree_insert(th, *tbptr, v, (int) (vptr - v),
 						pk_row, pk_row_sz, insert_flags);
 			}
 			else
 			{
+				fn_pos = 4;
 				char nb = '\0';
 				rv = tapioca_bptree_insert(th, *tbptr, v, (int) (vptr - v),
 						(void *) &nb, 1, insert_flags);
@@ -646,11 +648,13 @@ int ha_tapioca::write_index_data(uchar *buf, uchar *pk_buf, int *pk_len,
 		}
 		else
 		{
+			fn_pos = 5;
 			rv = tapioca_bptree_insert(th, *tbptr, v, (int) (vptr - v), pk_buf,
 					*pk_len, insert_flags);
 		}
+		
 		if (rv == BPTREE_OP_RETRY_NEEDED) {
-			usleep(500 * 1000);
+			usleep(100 * 1000);
 			DBUG_RETURN(HA_ERR_TOO_MANY_CONCURRENT_TRXS);
 		}
 		else if (rv < 0) {
@@ -663,7 +667,6 @@ int ha_tapioca::write_index_data(uchar *buf, uchar *pk_buf, int *pk_len,
 		tbptr++;
 		key_info++;
 	}
-	fn_pos = 3;
 
 	DBUG_RETURN(0);
 
@@ -685,10 +688,10 @@ int ha_tapioca::write_row(uchar *buf)
 	int fn_pos = 0;
 	int32_t packed_row_sz = 0, pk_sz = -1, rv;
 	// buf that will contain the PK used in tapioca
-	uchar pk[TAPIOCA_MAX_VALUE_BUFFER];
-	uchar v[TAPIOCA_MAX_VALUE_BUFFER];
-	bzero(pk, TAPIOCA_MAX_VALUE_BUFFER);
-	bzero(v, TAPIOCA_MAX_VALUE_BUFFER);
+	uchar pk[TAPIOCA_MAX_VALUE_SIZE];
+	uchar v[TAPIOCA_MAX_VALUE_SIZE];
+	bzero(pk, TAPIOCA_MAX_VALUE_SIZE);
+	bzero(v, TAPIOCA_MAX_VALUE_SIZE);
 	uchar *pk_ptr = pk;
 
 	if (thd_sql_command(table->in_use) == SQLCOM_LOAD && write_rows % 20 == 0)
@@ -790,11 +793,11 @@ int ha_tapioca::update_row(const uchar *old_data, uchar *new_data)
 	int rv;
 	assert(is_thrloc_sane(thrloc));
     int32_t buf_size = 0, pk_size = -1, old_pk_size, dummy = 0;
-    uchar pk[TAPIOCA_MAX_VALUE_BUFFER];
-    uchar old_pk[TAPIOCA_MAX_VALUE_BUFFER];
-    uchar v[TAPIOCA_MAX_VALUE_BUFFER];
-    bzero(pk, TAPIOCA_MAX_VALUE_BUFFER);
-    bzero(v, TAPIOCA_MAX_VALUE_BUFFER);
+    uchar pk[TAPIOCA_MAX_VALUE_SIZE];
+    uchar old_pk[TAPIOCA_MAX_VALUE_SIZE];
+    uchar v[TAPIOCA_MAX_VALUE_SIZE];
+    bzero(pk, TAPIOCA_MAX_VALUE_SIZE);
+    bzero(v, TAPIOCA_MAX_VALUE_SIZE);
     uchar *pk_ptr = pk;
     uchar *old_pk_ptr = old_pk;
     tapioca_bptree_id *tbptr;
@@ -854,10 +857,10 @@ int ha_tapioca::delete_row(const uchar *buf)
 	DBUG_ENTER("ha_tapioca::delete_row");
 	assert(is_thrloc_sane(thrloc));
     int32_t buf_size = 0, pk_size = -1, old_pk_size, dummy = 0;
-    uchar pk[TAPIOCA_MAX_VALUE_BUFFER];
-    uchar v[TAPIOCA_MAX_VALUE_BUFFER];
-    bzero(pk, TAPIOCA_MAX_VALUE_BUFFER);
-    bzero(v, TAPIOCA_MAX_VALUE_BUFFER);
+    uchar pk[TAPIOCA_MAX_VALUE_SIZE];
+    uchar v[TAPIOCA_MAX_VALUE_SIZE];
+    bzero(pk, TAPIOCA_MAX_VALUE_SIZE);
+    bzero(v, TAPIOCA_MAX_VALUE_SIZE);
     uchar *pk_ptr = pk;
     uchar *vptr = v;
     const uchar *bptr = buf;
@@ -1047,10 +1050,10 @@ int ha_tapioca::index_read(uchar * buf, const uchar * key, uint key_len,
 
 	// TODO Refactor this to make use of a thread-local buffer instead of
 	// creating it on the stack every time
-	uchar k[TAPIOCA_MAX_VALUE_BUFFER];
-	uchar v[TAPIOCA_MAX_VALUE_BUFFER];
-	bzero(k, TAPIOCA_MAX_VALUE_BUFFER);
-	bzero(v, TAPIOCA_MAX_VALUE_BUFFER);
+	uchar k[TAPIOCA_MAX_VALUE_SIZE];
+	uchar v[TAPIOCA_MAX_VALUE_SIZE];
+	bzero(k, TAPIOCA_MAX_VALUE_SIZE);
+	bzero(v, TAPIOCA_MAX_VALUE_SIZE);
 	uchar *pk_ptr = k;
 	uchar *vptr;
 	int pk_size, rv;
@@ -1149,7 +1152,7 @@ int ha_tapioca::index_fetch_buffered(uchar *buf, bool first)
 	assert(is_thrloc_sane(thrloc));
 	int ksize, vsize,  rv = -1;
 	int *pk_size;
-	uchar rowbuf[TAPIOCA_MAX_VALUE_BUFFER];
+	uchar rowbuf[TAPIOCA_MAX_VALUE_SIZE];
 	uchar *pk_ptr;
 	bool first_flag = first;
 	bool has_rows = true;
@@ -1212,8 +1215,8 @@ int ha_tapioca::prefetch_tapioca_rows(tapioca_bptree_id tbpt_id, bool first,
 	mget_result *mres;
 	rv = 1;
 	tapioca_handle *th = thrloc->th;
-	uchar k[TAPIOCA_MAX_VALUE_BUFFER];
-	uchar v[TAPIOCA_MAX_VALUE_BUFFER];
+	uchar k[TAPIOCA_MAX_VALUE_SIZE];
+	uchar v[TAPIOCA_MAX_VALUE_SIZE];
 	uchar *kptr = write_tapioca_buffer_header(k);
 	uchar *vptr = write_tapioca_buffer_header(v);
 	uchar *pk_ptr;
@@ -1295,7 +1298,7 @@ int ha_tapioca::read_index_key(uchar *buf, uchar *k, uchar *rowbuf, int ksize)
 	}
 	else
 	{
-		rv = tapioca_get(thrloc->th, k, ksize, rowbuf, TAPIOCA_MAX_VALUE_BUFFER);
+		rv = tapioca_get(thrloc->th, k, ksize, rowbuf, TAPIOCA_MAX_VALUE_SIZE);
 		if (rv == -1) DBUG_RETURN(HA_ERR_KEY_NOT_FOUND);
 	}
 
@@ -1319,9 +1322,9 @@ int ha_tapioca::index_fetch(uchar *buf, bool first)
 	assert(is_thrloc_sane(thrloc));
 	// Just in case we somehow enter here again
 	int ksize, vsize, pk_size, rv;
-	uchar k[TAPIOCA_MAX_VALUE_BUFFER];
-	uchar v[TAPIOCA_MAX_VALUE_BUFFER];
-	uchar rowbuf[TAPIOCA_MAX_VALUE_BUFFER];
+	uchar k[TAPIOCA_MAX_VALUE_SIZE];
+	uchar v[TAPIOCA_MAX_VALUE_SIZE];
+	uchar rowbuf[TAPIOCA_MAX_VALUE_SIZE];
 	uchar *kptr = write_tapioca_buffer_header(k);
 	uchar *vptr = write_tapioca_buffer_header(v);
 	uchar *pk_ptr;
@@ -1500,7 +1503,7 @@ int ha_tapioca::rnd_pos(uchar *buf, uchar *pos)
 {
 	DBUG_ENTER("ha_tapioca::rnd_pos");
 	int rv;
-	uchar rowbuf[TAPIOCA_MAX_VALUE_BUFFER];
+	uchar rowbuf[TAPIOCA_MAX_VALUE_SIZE];
 	tapioca_bptree_id tbpt_id;
 
 	rv = read_index_key(buf, pos, rowbuf, ref_length );
@@ -1683,7 +1686,7 @@ void * ha_tapioca::initialize_thread_local_space()
 #ifdef BPTREE_BUFFERING
 	for (int i = 0; i < TAPIOCA_MGET_BUFFER_SIZE; i++ )
 	{
-		bzero(thrloc->val_buf[i],TAPIOCA_MAX_VALUE_BUFFER);
+		bzero(thrloc->val_buf[i],TAPIOCA_MAX_VALUE_SIZE);
 	}
 #endif
 	(void) my_hash_init(&(thrloc->tsessions), system_charset_info, 32, 0, 0,
