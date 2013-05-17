@@ -44,7 +44,7 @@ static int32_t conn_counter = 0;
 // TODO Makes more sense to use the administrative connection to maintain this
 static volatile uint32_t local_execution_id = 1;
 
-static int reload_tapioca_bptree_metadata();
+static int reload_tapioca_bptree_metadata(uint16_t *num_bptrees_read);
 static int tapioca_parse_config();
 bool is_thrloc_sane(tapioca_thrloc *thrloc);
 
@@ -164,15 +164,17 @@ static int tapioca_init_func(void *p)
 	if (rv) DBUG_RETURN(rv);
 
 	if (!th_global_enabled)
+	{
 		if (init_administrative_connection() < 0)
 		{
 			printf( "TAPIOCA: Couldn't get administrative cxn to tapioca!\n" );
 			fflush(stdout);
 			DBUG_RETURN(-1);
 		}
+	}
 
-	rv = reload_tapioca_bptree_metadata();
-
+	uint16_t num_bptrees_read;	
+	rv = reload_tapioca_bptree_metadata(&num_bptrees_read);
 	pthread_mutex_unlock(&tapioca_mutex);
 
 	if (rv == -1)
@@ -180,6 +182,11 @@ static int tapioca_init_func(void *p)
 		printf("TAPIOCA: Failed to reload Tapioca B+Tree data\n");
 		DBUG_RETURN(-1);
 	}
+	if (num_bptrees_read > 0) 
+	{
+		printf("Read %d existing b+trees from storage layer\n",num_bptrees_read);
+	}
+
 
 	DBUG_RETURN(0);
 }
@@ -240,7 +247,7 @@ static int tapioca_parse_config() {
 	DBUG_RETURN(0);
 }
 
-static int reload_tapioca_bptree_metadata()
+static int reload_tapioca_bptree_metadata(uint16_t *num_bptrees_read)
 {
 	DBUG_ENTER("reload_tapioca_bptree_metadata");
 	int rv;
@@ -254,24 +261,20 @@ static int reload_tapioca_bptree_metadata()
 	rv = tapioca_get(th_global, (uchar *) bpt_meta_key,
 			(int) strlen(bpt_meta_key), buf, TAPIOCA_MAX_VALUE_SIZE);
 
-	char *fmt = tpl_peek(TPL_MEM, buf, TAPIOCA_MAX_VALUE_SIZE);
+	// FIXME TPL sucks -- tpl_peek is failing for some stupid reason, refactor this to use messagepack
+	//char *fmt = tpl_peek(TPL_MEM, buf, TAPIOCA_MAX_VALUE_SIZE);
 	
-	if (fmt == NULL)
+	if (rv <= 0)
 	{
 		DBUG_PRINT("ha_tapioca", ("No metadata found, assuming fresh system"));
 		DBUG_RETURN(0);
 	}
 	
-	assert(strncmp(fmt, bpt_meta_key, strnlen(bpt_meta_key, 100)) == 0);
-	free(fmt);
-	
-	uint16_t num_bptrees;
-	tapioca_bptree_info *bpt_map = unmarshall_bptree_info(buf, &num_bptrees);
-
+	tapioca_bptree_info *bpt_map = unmarshall_bptree_info(buf, num_bptrees_read);
 	DBUG_PRINT( "ha_tapioca",
-			("unmarshalled %d bptrees, inserting to glob meta hash", num_bptrees));
+			("unmarshalled %d bptrees, inserting to glob meta hash", *num_bptrees_read));
 	
-	for (int i = 0; i < num_bptrees; i++)
+	for (int i = 0; i < *num_bptrees_read; i++)
 	{
 		if (bpt_map->is_active)
 		{
@@ -283,10 +286,10 @@ static int reload_tapioca_bptree_metadata()
 		}
 		bpt_map++;
 	}
+	
 	DBUG_PRINT( "ha_tapioca",
 			("unmarshalled %ul bptrees and inserted to metahash",
 					tapioca_bptrees.records));
-
 	DBUG_RETURN(0);
 
 }
@@ -1570,8 +1573,17 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 		if (!(bpt_info = (tapioca_bptree_info *) my_hash_search(&tapioca_bptrees,
 				(uchar*) full_index_name, strlen(full_index_name))))
 		{
-			printf("TAPIOCA: Couldn't find bpt meta info for %s\n",
+			// Try to reload -- if we fail throw an error
+			uint16_t num_bptrees_read;
+			int rv = reload_tapioca_bptree_metadata(&num_bptrees_read);
+			if (num_bptrees_read <= 0) {
+				printf("TAPIOCA: Couldn't find bpt meta info for %s\n",
 					full_index_name);
+			} else {
+				printf("Re-read %d trees from storage, try again\n",
+					   num_bptrees_read);
+			}
+			
 			DBUG_RETURN(NULL);
 		}
 		if (bpt_info->bpt_id == -1)
@@ -1981,8 +1993,9 @@ int ha_tapioca::repair(THD* thd, HA_CHECK_OPT* check_opt)
 {
 	DBUG_ENTER("ha_tapioca::repair");
 	int rv;
+	uint16_t num_bptrees_read;
 	pthread_mutex_lock(&tapioca_mutex);
-	rv = reload_tapioca_bptree_metadata();
+	rv = reload_tapioca_bptree_metadata(&num_bptrees_read);
 	pthread_mutex_unlock(&tapioca_mutex);
 	DBUG_RETURN(rv);
 }
@@ -2095,7 +2108,8 @@ int ha_tapioca::create(const char *name, TABLE *table_arg,
 	{
 		printf("TAPIOCA: This is not the first MySQL node; creating table"
 				" locally but no global metadata will be changed.\n");
-		DBUG_RETURN(reload_tapioca_bptree_metadata());
+		uint16_t num_bptrees_read;
+		DBUG_RETURN(reload_tapioca_bptree_metadata(&num_bptrees_read));
 	}
 	pthread_mutex_lock(&tapioca_mutex);
 
