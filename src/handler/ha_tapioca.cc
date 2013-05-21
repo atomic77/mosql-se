@@ -657,8 +657,8 @@ int ha_tapioca::write_index_data(uchar *buf, uchar *pk_buf, int *pk_len,
 		}
 		
 		if (rv == BPTREE_OP_RETRY_NEEDED) {
-			usleep(100 * 1000);
 			DBUG_RETURN(HA_ERR_TOO_MANY_CONCURRENT_TRXS);
+		//	DBUG_RETURN(HA_ERR_KEY_NOT_FOUND);
 		}
 		else if (rv < 0) {
 			goto index_exception;
@@ -859,7 +859,9 @@ int ha_tapioca::delete_row(const uchar *buf)
 {
 	DBUG_ENTER("ha_tapioca::delete_row");
 	assert(is_thrloc_sane(thrloc));
-    int32_t buf_size = 0, pk_size = -1, old_pk_size, dummy = 0;
+    int32_t buf_size = 0, pk_size = -1, old_pk_size;
+	int rv;
+	char dummy = 0;
     uchar pk[TAPIOCA_MAX_VALUE_SIZE];
     uchar v[TAPIOCA_MAX_VALUE_SIZE];
     memset(pk,0, TAPIOCA_MAX_VALUE_SIZE);
@@ -882,9 +884,10 @@ int ha_tapioca::delete_row(const uchar *buf)
 
     construct_pk_buffer_from_row(pk_ptr, (uchar *)buf, &pk_size);
 
-    tapioca_bptree_delete(thrloc->th, tbptr[table->s->primary_key],
-    		pk_ptr, pk_size, &dummy, sizeof(int32_t));
+    rv = tapioca_bptree_delete(thrloc->th, tbptr[table->s->primary_key],
+    		pk_ptr, pk_size, &dummy, 1);
 
+	// TODO Return a meaningful error code here
 	DBUG_RETURN(0);
 }
 

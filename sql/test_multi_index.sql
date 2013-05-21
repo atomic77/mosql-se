@@ -130,3 +130,22 @@ insert into v values (4,7,9,4,'o', 'o');
 insert into v values (5,6,9,10,'o','p');
 insert into v values (6,6,9,11,'p','q');
 
+
+create table u (
+a int not null,
+b int not null,
+primary key (a),
+key `idx_b` (b)) ENGINE=MoSQL;
+
+INSERT INTO u VALUES (1, 1);
+INSERT INTO u VALUES (2, 2);
+INSERT INTO u VALUES (3, 1);
+INSERT INTO u VALUES (4, 2);
+INSERT INTO u VALUES (5, 1);
+INSERT INTO u VALUES (9, 1);
+INSERT INTO u VALUES (8, 2);
+INSERT INTO u VALUES (7, 1);
+INSERT INTO u VALUES (6, 2);
+
+
+
