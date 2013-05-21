@@ -2038,14 +2038,14 @@ int ha_tapioca::check(THD* thd, HA_CHECK_OPT* check_opt)
 			printf("Seq. dump of idx %d name %s, %d parts, bpt_id %d",
 					i,key_info->name, key_info->key_parts, *tbptr);
 			rv = tapioca_bptree_debug(th, *tbptr,
-					BPTREE_DEBUG_DUMP_RECURSIVE);
+					BPTREE_DEBUG_DUMP_RECURSIVELY);
 		}
 		else if (check_opt->flags & T_QUICK)
 		{
 			printf("Seq. dump of idx %d name %s, %d parts, bpt_id %d",
 					i,key_info->name, key_info->key_parts, *tbptr);
 			rv = tapioca_bptree_debug(th, *tbptr,
-					BPTREE_DEBUG_DUMP_SEQUENTIAL);
+					BPTREE_DEBUG_DUMP_SEQUENTIALLY);
 		}
 		else if (check_opt->flags & T_FAST)
 		{
