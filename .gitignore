@@ -8,6 +8,7 @@
 bin/
 Debug/
 Debug_uc/
+log/
 
 # Libraries
 *.lib
