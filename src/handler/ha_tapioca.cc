@@ -1852,7 +1852,14 @@ int ha_tapioca::external_lock(THD *thd, int lock_type)
 				fflush(stdout);
 				thrloc->tx_active = false;
 
-				if (rv < 0) DBUG_RETURN(HA_ERR_TOO_MANY_CONCURRENT_TRXS);
+=				if (rv < 0) {
+					rv = 12312;
+					/* FIXME Need to determine the proper way to tell mysql we could not commit
+					 * after we are done with all the tables as this is causing a crash */
+					//DBUG_RETURN(HA_ERR_LOCK_TABLE_FULL);
+					
+					//DBUG_RETURN(0);
+				}
 				statistic_add(table->in_use->status_var.ha_savepoint_count, rv, &LOCK_status);
 				statistic_increment( table->in_use->status_var.ha_savepoint_rollback_count, &LOCK_status);
 			}
