@@ -1,12 +1,14 @@
 MoSQL Storage Engine
 ====================
 
-The MoSQL storage engine for MySQL/MariaDB (mosql-se) requires the mosql-storage system to be running in order to function. The MoSQL storage layer is a fully-functioning transactional key-value system on its own, useful for applications which do not require full-fledged SQL transactions. 
+The MoSQL storage engine for MySQL/MariaDB (mosql-se) is a single component of the larger MoSQL system developed at the Unviersity of Lugano. For an overview, please see the [main project home page](http://dslab.inf.usi.ch/mosql/). 
+
+mosql-se requires [mosql-storage](https://bitbucket.org/atomic77/mosql-storage) to be running in order to function. The MoSQL storage layer is a fully-functioning transactional key-value system on its own, useful for applications which do not require full-fledged SQL transactions. 
 
 Building
 --------
 
-The MoSQL storage engine uses CMake. It is a pain to build properly because it requires the full source of MySQL/MariaDB, so another option is to simply download a pre-built version of the shared library from (link goes here). For the brave, you will require:
+The MoSQL storage engine code uses CMake. It is a pain to build properly because it requires the full source of MySQL/MariaDB, so another option is to simply download a pre-built version of the shared library from (link to go here). For the brave, you will require:
 
 * MySQL/MariaDB 5.0+
 * *Full* source for the version you intend to run, not just the development headers!
@@ -43,7 +45,7 @@ In the scripts folder, use launch_db.sh to copy the shared library to the approp
 
 To install the storage engine library into the MySQL server, run
 
-    INSTALL PLUGIN mosql SONAME 'ha_tapioca.so';
+    INSTALL PLUGIN mosql SONAME 'libmosqlse.so';
 
 In order for the plugin to successfully install, it will expect to find a single configuration file called 'tapioca.cfg' in the data directory of your mysql installation. The format is simple, it should contain a single line for every storage node you wish the MySQL server to connect to in the following format:
 
