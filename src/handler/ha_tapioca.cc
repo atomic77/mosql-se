@@ -109,6 +109,7 @@ int ha_tapioca_commit(handlerton *hton, THD *thd, bool all)
 		DBUG_RETURN(-1);
 	}
 	assert(is_thrloc_sane(thrloc));
+	assert(thrloc->tx_active); // we shouldn't get in here if the tx is inactive
 	if (thrloc->tx_active)
 	{
 		rv = tapioca_commit(thrloc->th);
@@ -134,6 +135,7 @@ int ha_tapioca_rollback(handlerton *hton, THD *thd, bool all)
 	if (thrloc == NULL)
 		DBUG_RETURN(-1);
 	assert(is_thrloc_sane(thrloc));
+	assert(thrloc->tx_active); // we shouldn't get in here if the tx is inactive
 	if (thrloc->tx_active)
 	{
 		tapioca_rollback(thrloc->th);
@@ -1817,13 +1819,14 @@ int ha_tapioca::external_lock(THD *thd, int lock_type)
 		if (all_tx)
 		{
 			trans_register_ha(thd, true, tapioca_hton);
-			thrloc->tx_active = true;
+			//thrloc->tx_active = true;
 		}
 		else
 		{
 			trans_register_ha(thd, false, tapioca_hton);
-			thrloc->tx_active = false;
+			//thrloc->tx_active = false;
 		}
+		thrloc->tx_active = true;
 
 		pthread_mutex_unlock(&tapioca_mutex);
 	}
@@ -1840,7 +1843,7 @@ int ha_tapioca::external_lock(THD *thd, int lock_type)
 		// Is this the correct way to handle auto-commits?
 		thrloc->num_tables_in_use--;
 		// We should commit only when exiting ext_lock!
-		if (thrloc->num_tables_in_use == 0)
+/*		if (thrloc->num_tables_in_use == 0)
 		{
 			if (!thd_test_options(thd, OPTION_NOT_AUTOCOMMIT | OPTION_BEGIN)
 					&& !thrloc->tx_active)
@@ -1852,10 +1855,11 @@ int ha_tapioca::external_lock(THD *thd, int lock_type)
 				fflush(stdout);
 				thrloc->tx_active = false;
 
-=				if (rv < 0) {
+				if (rv < 0) {
 					rv = 12312;
-					/* FIXME Need to determine the proper way to tell mysql we could not commit
-					 * after we are done with all the tables as this is causing a crash */
+					// We should only commit read-only transactions here; proper write transactions
+					 //that could fail should be registered and handled by ha_tapioca_commit 
+					 
 					//DBUG_RETURN(HA_ERR_LOCK_TABLE_FULL);
 					
 					//DBUG_RETURN(0);
@@ -1865,6 +1869,7 @@ int ha_tapioca::external_lock(THD *thd, int lock_type)
 			}
 
 		}
+		*/
 		pthread_mutex_unlock(&tapioca_mutex);
 	}
 
