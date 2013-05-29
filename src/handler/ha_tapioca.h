@@ -100,6 +100,7 @@ typedef struct st_tapioca_thrloc
 	int node_id; // 0-based index of which tapioca node we are connected to
 	int accesses;
 	bool tx_active;
+	bool tx_cant_commit; // used in some cases where we should not commit
 	int num_tables_in_use;
 	int open_tables;
 	int th_enabled;
