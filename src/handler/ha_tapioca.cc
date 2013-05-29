@@ -110,19 +110,24 @@ int ha_tapioca_commit(handlerton *hton, THD *thd, bool all)
 	}
 	assert(is_thrloc_sane(thrloc));
 	assert(thrloc->tx_active); // we shouldn't get in here if the tx is inactive
-	if (thrloc->tx_active)
-	{
-		rv = tapioca_commit(thrloc->th);
-		DBUG_PRINT("ha_tapioca",
-				("Commit in ha_tapioca_commit tid %lu bpt* %p rv %d \n",
-						thd->real_id, thrloc->th, rv));
+	if (thrloc->tx_cant_commit) {
+		tapioca_rollback(thrloc->th);
 		thrloc->tx_active = false;
-		if (rv < 0)
-			DBUG_RETURN( HA_ERR_TOO_MANY_CONCURRENT_TRXS);
-
-		statistic_add(thd->status_var.ha_savepoint_count, rv, &LOCK_status);
-		statistic_increment( thd->status_var.ha_savepoint_rollback_count, &LOCK_status);
+		thrloc->tx_cant_commit = false;
+		DBUG_RETURN( HA_ERR_TOO_MANY_CONCURRENT_TRXS);
 	}
+	
+	rv = tapioca_commit(thrloc->th);
+	
+	DBUG_PRINT("ha_tapioca",
+			("Commit in ha_tapioca_commit tid %lu bpt* %p rv %d \n",
+					thd->real_id, thrloc->th, rv));
+	thrloc->tx_active = false;
+	if (rv < 0)
+		DBUG_RETURN( HA_ERR_TOO_MANY_CONCURRENT_TRXS);
+
+	statistic_add(thd->status_var.ha_savepoint_count, rv, &LOCK_status);
+	statistic_increment( thd->status_var.ha_savepoint_rollback_count, &LOCK_status);
 	DBUG_RETURN(0);
 }
 int ha_tapioca_rollback(handlerton *hton, THD *thd, bool all)
@@ -136,11 +141,11 @@ int ha_tapioca_rollback(handlerton *hton, THD *thd, bool all)
 		DBUG_RETURN(-1);
 	assert(is_thrloc_sane(thrloc));
 	assert(thrloc->tx_active); // we shouldn't get in here if the tx is inactive
-	if (thrloc->tx_active)
-	{
-		tapioca_rollback(thrloc->th);
-		thrloc->tx_active = false;
-	}
+	
+	tapioca_rollback(thrloc->th);
+	
+	thrloc->tx_active = false;
+	thrloc->tx_cant_commit = false;
 	DBUG_RETURN(0);
 }
 
@@ -439,16 +444,20 @@ int ha_tapioca::open(const char *name, int mode, uint test_if_locked)
 	/* FIXME Brutal hack for now; hard code the tables that we will
 	 * store the rows still in a separate tapioca key; default is store in-node
 	 */
-	is_row_in_node = false;
-	const char * sep_row_tables[] = { "item", "order_line", "orders", "new_order", "history"};
-	for (int i = 0; i < 5; i++)
+	is_row_in_node = true;
+	//const char * sep_row_tables[] = { "item", "order_line", "orders", "new_order", "history"};
+	const char * sep_row_tables[] = { "customer", "stock", "warehouse", "district"};
+	for (int i = 0; i < 4; i++)
 	{
 		if (strcmp(sep_row_tables[i], table->s->table_name.str) == 0)
 		{
-			is_row_in_node = true;
+			is_row_in_node = false;
 			break;
 		}
 	}
+	
+	is_row_in_node = true;
+	
 	// </WARNING WARNING DANGER DANGER>
 
 	if (!(share = get_share(name, table)))
@@ -659,8 +668,10 @@ int ha_tapioca::write_index_data(uchar *buf, uchar *pk_buf, int *pk_len,
 		}
 		
 		if (rv == BPTREE_OP_RETRY_NEEDED) {
-			DBUG_RETURN(HA_ERR_TOO_MANY_CONCURRENT_TRXS);
-		//	DBUG_RETURN(HA_ERR_KEY_NOT_FOUND);
+			// Don't return an error here -- just flag the tx for rollback whenever
+			// it tries to commit
+			//DBUG_RETURN(HA_ERR_TOO_MANY_CONCURRENT_TRXS);
+			thrloc->tx_cant_commit = true;
 		}
 		else if (rv < 0) {
 			goto index_exception;
@@ -824,7 +835,10 @@ int ha_tapioca::update_row(const uchar *old_data, uchar *new_data)
     //old_pk_size += get_tapioca_header_size();
 
 
- /* FIXME We still need to properly support updating of actual indexed values*/
+ /* FIXME We still need to properly support updating of actual indexed values
+			and also to ensure we have changed any secondary keys if they
+			were changed */
+ 
 /*  if(old_pk_size != pk_size || !memcmp(pk_ptr, old_pk_ptr, pk_size))
     {
     	// The primary key for this table has changed; we must delete/insert
@@ -1694,6 +1708,7 @@ void * ha_tapioca::initialize_thread_local_space()
 //	thrloc->th_enabled = 1;
 	thrloc->th_enabled = 0;
 	thrloc->tx_active = false;
+	thrloc->tx_cant_commit = false;
 	thrloc->num_tables_in_use = 0;
 	thrloc->open_tables = 0;
 	thrloc->val_buf_pos = -1;
