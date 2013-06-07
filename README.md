@@ -1,18 +1,18 @@
 MoSQL Storage Engine
 ====================
 
-The MoSQL storage engine for MySQL/MariaDB (mosql-se) is a single component of the larger MoSQL system developed at the Unviersity of Lugano. For an overview, please see the [main project home page](http://dslab.inf.usi.ch/mosql/). 
+The MoSQL storage engine for MySQL/MariaDB (mosql-se) is a single component of the larger MoSQL system developed at the Unviersity of Lugano, now released under the GPL v3. For an overview of the system, please see the [main project home page](http://dslab.inf.usi.ch/mosql/). 
 
 mosql-se requires [mosql-storage](https://bitbucket.org/atomic77/mosql-storage) to be running in order to function. The MoSQL storage layer is a fully-functioning transactional key-value system on its own, useful for applications which do not require full-fledged SQL transactions. 
 
 Building
 --------
 
-The MoSQL storage engine code uses CMake. It is a pain to build properly because it requires the full source of MySQL/MariaDB, so another option is to simply download a pre-built version of the shared library from (link to go here). For the brave, you will require:
+The MoSQL storage engine code uses CMake. It is a pain to build properly because it requires the full source of MySQL/MariaDB, so we will be making binaries available for different versions of MySQL. For the brave, you will require:
 
-* MySQL/MariaDB 5.0+
+* MySQL 5.1 (see the wiki/issues for support coming for newer versions)
 * *Full* source for the version you intend to run, not just the development headers!
-* mosql-storage (git link)
+* [mosql-storage] built and installed
 * libevent 2.0+
 
 An example of how to build using CMake:
@@ -20,11 +20,11 @@ An example of how to build using CMake:
     cd mosql-se
     mkdir build
     cd build
-    cmake -D CMAKE_INSTALL_PREFIX=/home/atomic/local/mosql-se \ 
-      -D MYSQLSRC_ROOT=/home/atomic/src/mysql-5.1.51 \
-      -D LIBTAPIOCA_ROOT=/home/atomic/local/mosql-storage  \ 
+    cmake -D CMAKE_INSTALL_PREFIX=~/local/mosql-se \ 
+      -D MYSQLSRC_ROOT=~/src/mysql-5.1.51 \
+      -D LIBTAPIOCA_ROOT=~/local/mosql-storage  \ 
       -D  CMAKE_BUILD_TYPE=Debug  \
-      -D MYSQL_ROOT=/home/atomic/local/mysql-debug-5.1.51 ../src
+      -D MYSQL_ROOT=~/local/mysql-debug-5.1.51 ../src
     
 
 Installation
