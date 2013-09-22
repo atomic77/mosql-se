@@ -1,4 +1,5 @@
 include_directories(${LIBTAPIOCA_INCLUDE_DIRS})
+include_directories(${MSGPACK_INCLUDE_DIRS})
 #### TODO
 # It looks like here we will need to also include the src tree include 
 # directory beacuse the directory structure of the headers in the 
@@ -14,7 +15,7 @@ IF( CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" )
   SET_TARGET_PROPERTIES(mosqlse tapiocautil PROPERTIES COMPILE_FLAGS "-fPIC")
 ENDIF( CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" )
 
-target_link_libraries(mosqlse ${LIBTAPIOCA_LIBRARIES} ${MYSQL_LIBRARIES} ${LIBEVENT_LIBRARIES} )
+target_link_libraries(mosqlse ${LIBTAPIOCA_LIBRARIES} ${MYSQL_LIBRARIES} ${LIBEVENT_LIBRARIES} ${MSGPACK_LIBRARIES} )
 
 set_property (TARGET mosqlse PROPERTY INSTALL_RPATH_USE_LINK_PATH TRUE)
 
