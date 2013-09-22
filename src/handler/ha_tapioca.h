@@ -34,6 +34,7 @@ extern "C"
 {
 #include "tapioca_util.h"
 #include "tpl.h"
+#include <msgpack.h>
 }
 
 
@@ -139,7 +140,8 @@ int ha_tapioca_rollback(handlerton *hton, THD *thd, bool all);
 void get_table_index_key(String *s, const char *table_name,
 		const char *index_name);
 tapioca_bptree_info *
-unmarshall_bptree_info(const void *buf, uint16_t *num_bptrees);
+//unmarshall_bptree_info(const void *buf, uint16_t *num_bptrees);
+unmarshall_bptree_info(const char *buf, size_t sz, uint16_t *num_bptrees);
 inline int get_tapioca_header_size();
 uint32_t get_next_bptree_execution_id(int node);
 /** @brief

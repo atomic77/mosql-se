@@ -48,9 +48,9 @@ void memarea_as_string(char *s, unsigned char *m, int num_bytes) {
  */
 // DEPRECATED
 int16_t get_bptree_id_for_name(const char *table, const char *index,
-		tapioca_bptree_info *bpt_map, int num_bptrees) {
+		struct tapioca_bptree_info *bpt_map, int num_bptrees) {
 
-	tapioca_bptree_info *ptr = bpt_map;
+	struct tapioca_bptree_info *ptr = bpt_map;
 	int i;
 	for (i = 0; i < num_bptrees; i++) {
 /*
@@ -73,7 +73,7 @@ int16_t get_bptree_id_for_name(const char *table, const char *index,
  * Returns -1 if not found
  */
 // DEPRECATED
-int output_bptree_id_map(tapioca_bptree_info *bpt_map,	int num_bptrees) {
+int output_bptree_id_map(struct tapioca_bptree_info *bpt_map, int num_bptrees) {
 	int i;
 	printf("bptree_id_map currently:\n");
 	for (i = 0; i < num_bptrees; i++) {
