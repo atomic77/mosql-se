@@ -94,7 +94,7 @@ tsession_get_key(tapioca_table_session *tsession, size_t *length,
 }
 
 // Function we use in our hash of open tables in a thread
-static uchar* tapioca_bptree_info_get_key(tapioca_bptree_info *bpt_info,
+static uchar* tapioca_bptree_info_get_key(struct tapioca_bptree_info *bpt_info,
 		size_t *length, my_bool not_used __attribute__((unused)))
 {
 	*length = strlen(bpt_info->full_index_name);
@@ -280,21 +280,21 @@ static int reload_tapioca_bptree_metadata(uint16_t *num_bptrees_read)
 			(my_hash_get_key) tapioca_bptree_info_get_key, 0, 0);
 	const char* bpt_meta_key = TAPIOCA_BPTREE_META_KEY;
 	// TODO We will fail badly if this buffer goes > 64k, max tapioca buf size
-	uchar buf[TAPIOCA_MAX_VALUE_SIZE];
+	char buf[TAPIOCA_MAX_VALUE_SIZE];
 	memset(buf,0, TAPIOCA_MAX_VALUE_SIZE);
 	rv = tapioca_get(th_global, (uchar *) bpt_meta_key,
 			(int) strlen(bpt_meta_key), buf, TAPIOCA_MAX_VALUE_SIZE);
 
-	// FIXME TPL sucks -- tpl_peek is failing for some stupid reason, refactor this to use messagepack
-	//char *fmt = tpl_peek(TPL_MEM, buf, TAPIOCA_MAX_VALUE_SIZE);
-	
 	if (rv <= 0)
 	{
+		*num_bptrees_read = 0;
+		printf("No b+tree metadata found, assuming fresh system\n");
 		DBUG_PRINT("ha_tapioca", ("No metadata found, assuming fresh system"));
 		DBUG_RETURN(0);
 	}
 	
-	tapioca_bptree_info *bpt_map = unmarshall_bptree_info(buf, num_bptrees_read);
+	// TODO Verify that rv is sending the proper buffer size
+	struct tapioca_bptree_info *bpt_map = unmarshall_bptree_info(buf,(size_t) rv, num_bptrees_read);
 	DBUG_PRINT( "ha_tapioca",
 			("unmarshalled %d bptrees, inserting to glob meta hash", *num_bptrees_read));
 	
@@ -1601,12 +1601,12 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 	KEY* key_info = table->key_info;
 	for (int i = 0; i < table->s->keys; i++)
 	{
-		tapioca_bptree_info *bpt_info;
+		struct tapioca_bptree_info *bpt_info;
 		String full_index_str(TAPIOCA_MAX_TABLE_NAME_LEN * 2);
 		get_table_index_key(&full_index_str, full_table_name, key_info->name);
 		const char *full_index_name = full_index_str.ptr();
 
-		if (!(bpt_info = (tapioca_bptree_info *) my_hash_search(&tapioca_bptrees,
+		if (!(bpt_info = (struct tapioca_bptree_info *) my_hash_search(&tapioca_bptrees,
 				(uchar*) full_index_name, strlen(full_index_name))))
 		{
 			// Try to reload -- if we fail throw an error
@@ -2244,8 +2244,8 @@ int ha_tapioca::create_new_bpt_id(const char *table_name,
 	void *buf;
 	tapioca_bptree_id prev_bpt_id = -1, tbps_ignored;
 
-	tapioca_bptree_info *bpt_info = (tapioca_bptree_info *) my_malloc(
-			sizeof(tapioca_bptree_info), MYF(0));
+	struct tapioca_bptree_info *bpt_info = (struct tapioca_bptree_info *) my_malloc(
+			sizeof(struct tapioca_bptree_info), MYF(0));
 
 	bpt_info->bpt_id = -1;
 	bpt_info->is_pk = is_pk;
@@ -2288,7 +2288,7 @@ int ha_tapioca::create_new_bpt_id(const char *table_name,
 	printf("Current bptree_info hash contents:\n");
 	for (int i = 0; i < tapioca_bptrees.records; i++)
 	{
-		tapioca_bptree_info *t = (tapioca_bptree_info *) my_hash_element(
+		struct tapioca_bptree_info *t = (struct tapioca_bptree_info *) my_hash_element(
 				&tapioca_bptrees, i);
 		printf("bpt_id %d, is_pk %d, name %s namelen %d active %d\n",
 				t->bpt_id, t->is_pk, t->full_index_name,
@@ -2317,60 +2317,67 @@ uchar * ha_tapioca::marshall_bptree_info(int32_t *bsize)
 {
 	DBUG_ENTER("ha_tapioca::marshall_bptree_info");
 	int i;
-	tpl_node *tn;
-	tpl_bin tb_keys;
-	tpl_bin tb_values;
-	uchar *b;
-	char *tpl_fmt_str = TAPIOCA_TPL_BPTREE_ID_MAP_FMT;
+    /* creates buffer and serializer instance. */
+    msgpack_sbuffer *buffer = msgpack_sbuffer_new();
+    msgpack_packer *pck = msgpack_packer_new(buffer, msgpack_sbuffer_write);
+    msgpack_sbuffer_clear(buffer);
+	struct tapioca_bptree_info* m;
 
-	tapioca_bptree_info m;
-	tn = tpl_map(tpl_fmt_str, &m, TAPIOCA_MAX_TABLE_NAME_LEN * 2);
-
-	//tpl_pack( tn, 0 ); // pack the non-array elements?
+	msgpack_pack_int16(pck, tapioca_bptrees.records);
 	for (i = 0; i < tapioca_bptrees.records; i++)
 	{
-		uchar *bpt_info = my_hash_element(&tapioca_bptrees, i);
-		if (bpt_info == NULL)
-			DBUG_RETURN(NULL);
-		memcpy(&m, bpt_info, sizeof(tapioca_bptree_info));
-		tpl_pack(tn, 1);
+		m = (struct tapioca_bptree_info *) my_hash_element(&tapioca_bptrees, i);
+		if (m == NULL) DBUG_RETURN(NULL);
+		//memcpy(&m, bpt_info, sizeof(tapioca_bptree_info));
+		msgpack_pack_int16(pck, m->bpt_id);
+		msgpack_pack_raw(pck, sizeof(m->full_index_name));
+		msgpack_pack_raw_body(pck, m->full_index_name, sizeof(m->full_index_name));
+		msgpack_pack_int16(pck, m->is_active);
+		msgpack_pack_int16(pck, m->is_pk);
 	}
 
-	tpl_dump(tn, TPL_MEM, &b, bsize);
-	tpl_free(tn);
-	DBUG_RETURN(b);
+    msgpack_packer_free(pck);
+    *bsize = buffer->size;
+	uchar *p = (uchar *)buffer->data;
+    free(buffer);
+	DBUG_RETURN(p);
 }
 
-tapioca_bptree_info *
-unmarshall_bptree_info(const void *buf, uint16_t *num_bptrees)
+
+struct tapioca_bptree_info *
+unmarshall_bptree_info(const char *buf, size_t sz, uint16_t *num_bptrees)
 {
 	DBUG_ENTER("unmarshall_bptree_info");
-	int i, rv, rv1, rv2, arr_sz;
-	tpl_node *tn;
-	tapioca_bptree_info m;
-
-	char *tpl_fmt_str = TAPIOCA_TPL_BPTREE_ID_MAP_FMT;
-	tn = tpl_map(tpl_fmt_str, &m, TAPIOCA_MAX_TABLE_NAME_LEN * 2);
-
-	rv = tpl_load(tn, TPL_MEM | TPL_PREALLOCD | TPL_EXCESS_OK, buf,
-			4096);
-	if (rv < 0)
-		DBUG_RETURN(NULL);
-	arr_sz = tpl_Alen(tn, 1);
-	DBUG_PRINT("ha_tapioca", ("Got bptree arr_sz of %d", arr_sz));
-	tapioca_bptree_info *n = (tapioca_bptree_info *) malloc(
-			sizeof(tapioca_bptree_info) * arr_sz);
-	if (rv < 0)
-		DBUG_RETURN(NULL);
-	for (i = 0; i < arr_sz; i++)
+    msgpack_zone z;
+    msgpack_zone_init(&z, 4096);
+    msgpack_object obj;
+    msgpack_unpack_return ret;
+	size_t offset = 0;
+	int i;
+	
+    ret = msgpack_unpack(buf, sz, &offset, &z, &obj);
+    *num_bptrees =  (int16_t) obj.via.i64;
+	
+	struct tapioca_bptree_info *n = (struct tapioca_bptree_info *) malloc(
+			sizeof(tapioca_bptree_info) * *num_bptrees);
+	struct tapioca_bptree_info *nptr = n;
+	
+	for (i = 0; i < *num_bptrees; i++)
 	{
-		rv1 = tpl_unpack(tn, 1);
-		if (rv1 < 0)
-			DBUG_RETURN(NULL);
-		memcpy(&n[i], &m, sizeof(tapioca_bptree_info));
+		ret = msgpack_unpack(buf, sz, &offset, &z, &obj);
+		nptr->bpt_id = (tapioca_bptree_id) obj.via.i64;
+		ret = msgpack_unpack(buf, sz, &offset, &z, &obj);
+		strncpy(nptr->full_index_name, obj.via.raw.ptr, sizeof(nptr->full_index_name));
+		ret = msgpack_unpack(buf, sz, &offset, &z, &obj);
+		nptr->is_active = (int16_t) obj.via.i64;
+		ret = msgpack_unpack(buf, sz, &offset, &z, &obj);
+		nptr->is_pk = (int16_t) obj.via.i64;
+		nptr++;
 	}
-	tpl_free(tn);
-	*num_bptrees = arr_sz;
+	
+	assert(ret == MSGPACK_UNPACK_SUCCESS);
+	assert(*num_bptrees >= 0 && *num_bptrees < 16384);
+	msgpack_zone_destroy(&z);
 	DBUG_RETURN(n);
 }
 
@@ -2437,8 +2444,8 @@ int ha_tapioca::delete_table(const char *name)
 
 	for (i = 0; i < tapioca_bptrees.records; i++)
 	{
-		tapioca_bptree_info *bpt_info =
-				(tapioca_bptree_info *) my_hash_element(&tapioca_bptrees, i);
+		struct tapioca_bptree_info *bpt_info =
+				(struct tapioca_bptree_info *) my_hash_element(&tapioca_bptrees, i);
 		if (bpt_info == NULL)
 			continue; // this should not happen; upgrade to assert
 		printf("\tChecking %s against %s\n", bpt_info->full_index_name, name);
