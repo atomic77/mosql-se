@@ -331,69 +331,69 @@ static int tapioca_done_func(void *p)
 	DBUG_RETURN(error);
 }
 
-//static TAPIOCA_SHARE * get_share(const char *table_name, TABLE *table)
-//{
-//	TAPIOCA_SHARE *share;
-//	uint length;
-//	char *tmp_name;
-//	pthread_mutex_lock(&tapioca_mutex);
-//	length = (uint) strlen(table_name);
-//
-//	if (!(share = (TAPIOCA_SHARE*) my_hash_search(&tapioca_open_tables,
-//			(uchar*) table_name, length)))
-//	{
-//		if (!(share = (TAPIOCA_SHARE *) my_multi_malloc(
-//				MYF(MY_WME | MY_ZEROFILL), &share, sizeof(*share), &tmp_name,
-//				length + 1, NullS)))
-//		{
-//			pthread_mutex_unlock(&tapioca_mutex);
-//			return NULL;
-//		}
-//
-//		share->use_count = 0;
-//		share->table_name_length = length;
-//		share->table_name = tmp_name;
-//
-//		strcpy(share->table_name, table_name);
-//		if (my_hash_insert(&tapioca_open_tables, (uchar*) share))
-//			goto error;
-//		thr_lock_init(&share->lock);
-//		pthread_mutex_init(&share->mutex, MY_MUTEX_INIT_FAST);
-//	}
-//	share->use_count++;
-//	pthread_mutex_unlock(&tapioca_mutex);
-//
-//	return share;
-//
-//	error: pthread_mutex_destroy(&share->mutex);
-//#if MYSQL_VERSION_ID>=50500
-//	my_free(share);
-//#else
-//	my_free(share, MYF(0));
-//#endif
-//
-//	return NULL;
-//}
-//
-//static int free_share(TAPIOCA_SHARE *share)
-//{
-//	pthread_mutex_lock(&tapioca_mutex);
-//	if (!--share->use_count)
-//	{
-//		my_hash_delete(&tapioca_open_tables, (uchar*) share);
-//		thr_lock_delete(&share->lock);
-//		pthread_mutex_destroy(&share->mutex);
-//#if MYSQL_VERSION_ID>=50500
-//		my_free(share);
-//#else
-//	my_free(share, MYF(0));
-//#endif
-//	}
-//	pthread_mutex_unlock(&tapioca_mutex);
-//
-//	return 0;
-//}
-//
+static TAPIOCA_SHARE * get_share(const char *table_name, TABLE *table)
+{
+	TAPIOCA_SHARE *share;
+	uint length;
+	char *tmp_name;
+	pthread_mutex_lock(&tapioca_mutex);
+	length = (uint) strlen(table_name);
+
+	if (!(share = (TAPIOCA_SHARE*) my_hash_search(&tapioca_open_tables,
+			(uchar*) table_name, length)))
+	{
+		if (!(share = (TAPIOCA_SHARE *) my_multi_malloc(
+				MYF(MY_WME | MY_ZEROFILL), &share, sizeof(*share), &tmp_name,
+				length + 1, NullS)))
+		{
+			pthread_mutex_unlock(&tapioca_mutex);
+			return NULL;
+		}
+
+		share->use_count = 0;
+		share->table_name_length = length;
+		share->table_name = tmp_name;
+
+		strcpy(share->table_name, table_name);
+		if (my_hash_insert(&tapioca_open_tables, (uchar*) share))
+			goto error;
+		thr_lock_init(&share->lock);
+		pthread_mutex_init(&share->mutex, MY_MUTEX_INIT_FAST);
+	}
+	share->use_count++;
+	pthread_mutex_unlock(&tapioca_mutex);
+
+	return share;
+
+	error: pthread_mutex_destroy(&share->mutex);
+#if MYSQL_VERSION_ID>=50500
+	my_free(share);
+#else
+	my_free(share, MYF(0));
+#endif
+
+	return NULL;
+}
+
+static int free_share(TAPIOCA_SHARE *share)
+{
+	pthread_mutex_lock(&tapioca_mutex);
+	if (!--share->use_count)
+	{
+		my_hash_delete(&tapioca_open_tables, (uchar*) share);
+		thr_lock_delete(&share->lock);
+		pthread_mutex_destroy(&share->mutex);
+#if MYSQL_VERSION_ID>=50500
+		my_free(share);
+#else
+	my_free(share, MYF(0));
+#endif
+	}
+	pthread_mutex_unlock(&tapioca_mutex);
+
+	return 0;
+}
+
 static handler*
 tapioca_create_handler(handlerton *hton, TABLE_SHARE *table, MEM_ROOT *mem_root)
 {
@@ -477,7 +477,8 @@ int ha_tapioca::open(const char *name, int mode, uint test_if_locked)
 	
 	// </WARNING WARNING DANGER DANGER>
 
-	//if (!(share = get_share(name, table))) DBUG_RETURN(1);
+	if (!(share = get_share(name, table)))
+		DBUG_RETURN(1);
 
 	pthread_mutex_lock(&tapioca_mutex);
 
@@ -565,8 +566,7 @@ int ha_tapioca::close(void)
 
 	pthread_mutex_unlock(&tapioca_mutex);
 
-	//DBUG_RETURN(free_share(share));
-	DBUG_RETURN(0);
+	DBUG_RETURN(free_share(share));
 }
 
 /* This method assumes that the bytes before *pk_buf have already been
@@ -2145,12 +2145,12 @@ int ha_tapioca::create(const char *name, TABLE *table_arg,
 	int32_t table_id = -1;
 	int fn_pos = 0;
 
-//	if (!(share = get_share(name, table)))
-//	{
-//		printf("TAPIOCA: Exception in ::create to get_share\n");
-//		DBUG_RETURN(-1);
-//	}
-//
+	if (!(share = get_share(name, table)))
+	{
+		printf("TAPIOCA: Exception in ::create to get_share\n");
+		DBUG_RETURN(-1);
+	}
+
 	if (tapioca_nodes[0].mysql_instance_num != 0)
 	{
 		printf("TAPIOCA: This is not the first MySQL node; creating table"
@@ -2312,35 +2312,6 @@ int ha_tapioca::create_new_bpt_id(const char *table_name,
 	fflush(stdout);
 	DBUG_RETURN(-1);
 }
-/*
-uchar * ha_tapioca::marshall_bptree_info(int32_t *bsize)
-{
-	DBUG_ENTER("ha_tapioca::marshall_bptree_info");
-	int i;
-	tpl_node *tn;
-	tpl_bin tb_keys;
-	tpl_bin tb_values;
-	uchar *b;
-	char *tpl_fmt_str = TAPIOCA_TPL_BPTREE_ID_MAP_FMT;
-
-	tapioca_bptree_info m;
-	tn = tpl_map(tpl_fmt_str, &m, TAPIOCA_MAX_TABLE_NAME_LEN * 2);
-
-	//tpl_pack( tn, 0 ); // pack the non-array elements?
-	for (i = 0; i < tapioca_bptrees.records; i++)
-	{
-		uchar *bpt_info = my_hash_element(&tapioca_bptrees, i);
-		if (bpt_info == NULL)
-			DBUG_RETURN(NULL);
-		memcpy(&m, bpt_info, sizeof(tapioca_bptree_info));
-		tpl_pack(tn, 1);
-	}
-
-	tpl_dump(tn, TPL_MEM, &b, bsize);
-	tpl_free(tn);
-	DBUG_RETURN(b);
-}
-*/
 
 uchar * ha_tapioca::marshall_bptree_info(int32_t *bsize)
 {

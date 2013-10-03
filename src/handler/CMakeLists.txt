@@ -8,8 +8,8 @@ include_directories(${MYSQLSRC_INCLUDE_DIRS}/include)
 include_directories(${MYSQLSRC_INCLUDE_DIRS}/sql)
 include_directories(${MYSQLSRC_INCLUDE_DIRS}/regex)
 
-add_library(mosqlse SHARED ha_tapioca.cc tapioca_util.c tpl.c )
-add_library(tapiocautil STATIC tapioca_util.c tpl.c )
+add_library(mosqlse SHARED ha_tapioca.cc tapioca_util.c  )
+add_library(tapiocautil STATIC tapioca_util.c )
 
 IF( CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" )
   SET_TARGET_PROPERTIES(mosqlse tapiocautil PROPERTIES COMPILE_FLAGS "-fPIC")
