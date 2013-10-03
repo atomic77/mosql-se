@@ -6,6 +6,7 @@ find_package(LIBTAPIOCA REQUIRED)
 find_package(MYSQLSRC REQUIRED)
 find_package(MYSQL REQUIRED)
 find_package(LIBEVENT REQUIRED)
+find_package(MSGPACK REQUIRED)
 
 SET (MYSQLCOMMONFLAGS "-mtune=native -DUNIV_MUST_NOT_INLINE -static-libgcc -fno-exceptions -fno-omit-frame-pointer -fno-strict-aliasing   -DMYSQL_DYNAMIC_PLUGIN -rdynamic ")
 
