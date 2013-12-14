@@ -1552,8 +1552,12 @@ int ha_tapioca::rnd_pos(uchar *buf, uchar *pos)
 
 int ha_tapioca::info(uint flag)
 {
-	// TODO Add appropriate information for optimizer 
+	// TODO Review InnoDB code to start returning much more data back to opt.
 	DBUG_ENTER("ha_tapioca::info");
+	// This oddly seems to be all that InnoDB is doing 
+	if (flag & HA_STATUS_ERRKEY) {
+		errkey = 0;
+	}
 	DBUG_RETURN(0);
 }
 
