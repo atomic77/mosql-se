@@ -640,13 +640,16 @@ int ha_tapioca::write_index_data(uchar *buf, uchar *pk_buf, int *pk_len,
 		for (; key_part != key_end; ++key_part)
 		{
 			is_null = false;
-			if (key_part->null_bit)
+			// FIXME This null handling was wrong; for secondary keys,
+			// we support writing NULL into key values but cannot properly
+			// retrieve NULLs from the index, but non-NULL values will work
+			/*if (key_part->null_bit)
 			{
 				// If key value is null, move forward whatever the length is
 				is_null = true;
 				vptr += key_part->field->max_data_length();
 				continue;
-			}
+			}*/
 			Field *field = key_part->field;
 			field->pack(vptr, buf + field->offset(buf));
 			vptr += field->max_data_length();
