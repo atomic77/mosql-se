@@ -107,14 +107,9 @@ typedef struct st_tapioca_thrloc
 	HASH tsessions;
 	// We should do this more cleanly but this code will eventually removed
 	// from this layer so this is fine for now
-#ifdef BPTREE_BUFFERING
-	unsigned char val_buf[TAPIOCA_MGET_BUFFER_SIZE][TAPIOCA_MAX_VALUE_BUFFER];
-#else
-	unsigned char val_buf[1][1];
-#endif
-	int val_buf_sz;
+	uchar *write_buf; // buffer we use for various things
+	int write_buf_sz;
 	int should_not_be_written;
-	int val_buf_pos;
 	int tapioca_client_id;
 
 } tapioca_thrloc;
@@ -133,7 +128,6 @@ typedef struct st_tapioca_node_config
 	int mysql_instance_num;
 } tapioca_node_config;
 
-int get_next_autoinc(const char *key, int keylen, int *autoinc);
 int ha_tapioca_commit(handlerton *hton, THD *thd, bool all);
 int ha_tapioca_rollback(handlerton *hton, THD *thd, bool all);
 void get_table_index_key(String *s, const char *table_name,
@@ -167,8 +161,7 @@ private:
 	int init_tapioca_writer();
 	tapioca_handle *init_tapioca_connection(int *node_id);
 	int get_tapioca_table_id(tapioca_handle *th);
-    int construct_tapioca_key_buffer(uchar *k, const uchar *key, uint key_len,
-    		int *final_key_len);
+	void construct_tapioca_key_buffer(uchar *k, const uchar *key, uint key_len, size_t *buf_sz);
     int unpack_row_into_buffer(uchar *buf, uchar *v);
     uchar *write_tapioca_buffer_header(uchar *buf);
     int read_index_key(uchar *buf, uchar *k, uchar *rowbuf, int ksize);
@@ -180,15 +173,19 @@ private:
     int index_fetch_buffered(uchar *buf, bool first);
     tapioca_table_session *initialize_new_bptree_thread_data();
     void *initialize_thread_local_space();
-    uchar *marshall_bptree_info(int32_t *bsize);
+    uchar *marshall_bptree_info(size_t *buf_sz);
     int create_or_set_thrloc(THD *thd);
     int create_or_set_tsession(THD *thd);
     int prefetch_tapioca_rows(tapioca_bptree_id tbpt_id, bool first,
     	tapioca_thrloc *thrloc, tapioca_table_session *tsession, bool *has_rows);
-    void construct_pk_buffer_from_row(uchar *pk_buf, uchar *buf, int *pk_len);
+    uchar * construct_idx_buffer_from_row(const uchar *buf, size_t *buf_sz, int idx, 
+											bool incl_header);
     tapioca_handle * get_current_tapioca_handle();
-    void construct_tapioca_row_buffer(uchar *vptr, uchar *new_data,
-    		int32_t * buf_size);
+    uchar * construct_tapioca_row_buffer(uchar *buf, size_t * buf_sz);
+	int get_row_difference(tapioca_table_session *tsession, 
+								   const uchar *old_data, const uchar *new_data);
+	int insert_to_index(const uchar *buf, int idx, tapioca_bptree_id *tbptr,
+				uchar *row, size_t row_sz);
 public:
     ha_tapioca(handlerton *hton, TABLE_SHARE *table_arg);
     ~ha_tapioca()
@@ -269,8 +266,7 @@ public:
     int open(const char *name, int mode, uint test_if_locked);
     int close(void);
     int write_row(uchar *buf);
-    int write_index_data(uchar *buf, uchar *pk_buf, int *pk_len,
-    		uchar *pk_row, int pk_row_sz);
+    int write_all_indexes(uchar *buf, uchar *row, size_t row_sz);
     int update_row(const uchar *old_data, uchar *new_data);
     int delete_row(const uchar *buf);
     int index_read(uchar *buf, const uchar *key, uint key_len,
