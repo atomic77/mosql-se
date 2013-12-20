@@ -581,13 +581,17 @@ inline uchar * ha_tapioca::get_next_mem_slot() {
 	return (thrloc->ring_buf)+(thrloc->ring_buf_pos*TAPIOCA_MAX_VALUE_SIZE);
 }
 
-/*@ Re-construct the key buffer we'll send to tapioca */
+/*@ Re-construct the key buffer we'll send to tapioca, including header */
 uchar *ha_tapioca::construct_tapioca_key_buffer(const uchar *key, uint key_len,
-												size_t *buf_sz)
+												size_t *buf_sz, bool incl_header)
 {
 	DBUG_ENTER("ha_tapioca::construct_tapioca_key_buffer");
-	uchar *k = get_next_mem_slot();
-	uchar *kptr = write_tapioca_buffer_header(k);
+	uchar *k, *kptr;
+	kptr = k = get_next_mem_slot();
+	if (incl_header)
+	{
+		kptr = write_tapioca_buffer_header(k);
+	}
 	KEY *key_info = &table->key_info[active_index];
 	KEY_PART_INFO *key_part = key_info->key_part;
 	KEY_PART_INFO *key_end = key_part + key_info->key_parts;
@@ -645,7 +649,7 @@ uchar * ha_tapioca::construct_idx_buffer_from_row(const uchar *buf, size_t *buf_
  * -------------------------------------------
  * Row Length is packed with the length of the packed buffer to follow
  */
-uchar * ha_tapioca::construct_tapioca_row_buffer(uchar *buf, size_t * buf_sz)
+uchar * ha_tapioca::construct_tapioca_row_buffer(const uchar *buf, size_t * buf_sz)
 {
     uchar *v= get_next_mem_slot();
     uchar *vptr = v;
@@ -659,7 +663,8 @@ uchar * ha_tapioca::construct_tapioca_row_buffer(uchar *buf, size_t * buf_sz)
     my_bitmap_map *org_bitmap = dbug_tmp_use_all_columns(table, table->read_set);
     for(Field **field = table->field; *field; field++){
         if(!((*field)->is_null())){
-            vptr = (*field)->pack(vptr, buf + (*field)->offset(buf));
+            //vptr = (*field)->pack(vptr, buf + (*field)->offset(buf));
+            vptr = (*field)->pack(vptr, buf + ((*field)->ptr - buf));
         }
     }
 
@@ -672,11 +677,48 @@ uchar * ha_tapioca::construct_tapioca_row_buffer(uchar *buf, size_t * buf_sz)
 	return v;
 }
 
-int ha_tapioca::insert_to_index(const uchar *buf, int idx, tapioca_bptree_id *tbptr,
-				uchar *row, size_t row_sz)
+int ha_tapioca::delete_from_index(const uchar *buf, int idx)
+{
+	uchar *key, *val;
+	uchar nb = '\0';
+	size_t k_sz, v_sz;
+	
+	tapioca_bptree_id tbpt_id = get_tbpt_id_for_idx(idx);
+	if (tbpt_id == -1) return -1;
+	
+	if (idx == table->s->primary_key)
+	{
+		key = construct_idx_buffer_from_row(buf, &k_sz, 
+											  table->s->primary_key, false);
+		if (is_row_in_node)
+		{
+			val = construct_tapioca_row_buffer(buf, &v_sz);
+		}
+		else 
+		{
+			val = &nb;
+			v_sz = 1;
+			tapioca_put(thrloc->th, key, k_sz, val, v_sz);
+		}
+	}
+	else 
+	{
+		key = construct_idx_buffer_from_row(buf, &k_sz, idx, false);
+		val = construct_idx_buffer_from_row(buf, &v_sz, table->s->primary_key, false);
+	}
+	
+	int rv = tapioca_bptree_delete(thrloc->th, tbpt_id, key, k_sz, val, v_sz);
+	return rv;
+}
+
+int ha_tapioca::insert_to_index(const uchar *buf, int idx, uchar *row, size_t row_sz)
 {		
 	int rv;
 	size_t pk_sz, sk_sz;
+	
+	tapioca_bptree_id tbpt_id = get_tbpt_id_for_idx(idx);
+	if (tbpt_id == -1) return -1;
+	
 	uchar *pk = construct_idx_buffer_from_row(buf, &pk_sz, 
 											  table->s->primary_key, false);
 	sk_sz = pk_sz;
@@ -690,29 +732,29 @@ int ha_tapioca::insert_to_index(const uchar *buf, int idx, tapioca_bptree_id *tb
 	if (table->key_info->flags & HA_NOSAME)
 		insert_flags = BPTREE_INSERT_UNIQUE_KEY;
 
+	
 	if (idx == table->s->primary_key)
 	{
 		if(is_row_in_node)
 		{
-			rv = tapioca_bptree_insert(thrloc->th, *tbptr, pk, pk_sz,
+			rv = tapioca_bptree_insert(thrloc->th, tbpt_id, pk, pk_sz,
 					row, row_sz, insert_flags);
 		}
 		else
 		{
 			char nb = '\0';
-			rv = tapioca_bptree_insert(thrloc->th, *tbptr, pk, pk_sz, 
+			rv = tapioca_bptree_insert(thrloc->th, tbpt_id, pk, pk_sz, 
 					(void *) &nb, 1, insert_flags);
 		}
 	}
 	else
 	{
 		// This is a secondary key; the 'value' is the primary key buffer itself
-		rv = tapioca_bptree_insert(thrloc->th, *tbptr, sk, sk_sz,
+		rv = tapioca_bptree_insert(thrloc->th, tbpt_id, sk, sk_sz,
 								   pk, pk_sz, insert_flags);
 	}
 	return(rv);
 }
-
 
 
 /*@
@@ -720,25 +762,13 @@ int ha_tapioca::insert_to_index(const uchar *buf, int idx, tapioca_bptree_id *tb
  *  return a buffer in pk_buf to be used for the PK */
 int ha_tapioca::write_all_indexes(uchar *buf, uchar *row, size_t row_sz)
 {
-	DBUG_ENTER("ha_tapioca::write_index_data");
+	DBUG_ENTER("ha_tapioca::write_all_indexes");
 	assert(is_thrloc_sane(thrloc));
     int fn_pos = 0, rv;
-    tapioca_bptree_id *tbptr;
-
-	tapioca_table_session *tsession;
-	if (!(tsession = (tapioca_table_session *) my_hash_search(&thrloc->tsessions,
-		(uchar*) full_table_name, strlen(full_table_name)))) goto index_exception;
-	fn_pos = 1;
-
-	tbptr = tsession->tbpt_ids;
-
-	fn_pos = 2;
 
 	for (int i = 0; i < table->s->keys; i++)
 	{
-		
-		//rv = insert_to_index(buf, i, tbptr, pk_buf, pk_len, pk_row, pk_row_sz);
-		rv = insert_to_index(buf, i, tbptr, row, row_sz);
+		rv = insert_to_index(buf, i, row, row_sz);
 
 		if (rv == BPTREE_OP_RETRY_NEEDED) {
 			// Don't return an error here -- just flag the tx for rollback whenever
@@ -753,13 +783,12 @@ int ha_tapioca::write_all_indexes(uchar *buf, uchar *row, size_t row_sz)
 		{
 			DBUG_RETURN(HA_ERR_FOUND_DUPP_KEY);
 		}
-		tbptr++;
 	}
 
 	DBUG_RETURN(0);
 
 index_exception:
-	printf("TAPIOCA: Error in write_index_data at pos %d, rv %d\n",fn_pos, rv);
+	printf("TAPIOCA: Error in write_all_indexes at pos %d, rv %d\n",fn_pos, rv);
 	fflush(stdout);
 	DBUG_RETURN(-1);
 }
@@ -809,8 +838,21 @@ int ha_tapioca::write_row(uchar *buf)
 	DBUG_RETURN(-1);
 }
 
-int ha_tapioca::get_row_difference(tapioca_table_session *tsession, 
-								   const uchar *old_data, const uchar *new_data)
+tapioca_bptree_id ha_tapioca::get_tbpt_id_for_idx(int idx) 
+{
+	tapioca_table_session *tsession;
+	
+	if (idx >= table->s->keys) return -1;
+	if (!(tsession = (tapioca_table_session *) my_hash_search(&thrloc->tsessions,
+			(uchar*) full_table_name, strlen(full_table_name))))
+	{
+		return -1;
+	}
+
+	return tsession->tbpt_ids[idx];
+}
+
+int ha_tapioca::update_indexes(const uchar *old_data, const uchar *new_data)
 {
 	int rv;
 	MY_BITMAP idx_map; 
@@ -818,136 +860,90 @@ int ha_tapioca::get_row_difference(tapioca_table_session *tsession,
 	// Check if any indexed columns were updated in any index
 	for (int i =0; i < table->s->keys; i++)
 	{
-		if (i == table->s->primary_key) {
-			// TODO This is a special case we'll implement later
-			continue;
-		}
 		bitmap_init(&idx_map, idx_map_buf, table->s->fields, FALSE);
 		table->mark_columns_used_by_index_no_reset(i, &idx_map);
 		bitmap_intersect(&idx_map, table->write_set);
 			
 		if (!bitmap_is_clear_all(&idx_map))
 		{
-			// TODO Stub:
-			// get sk value from old_data
-			// for sk value **WHERE pk matches**,
-			//    bptree_delete sk -> pk map
-			//    bptree_insert new sk -> pk map
+			// One of the columns of this index has been written to
 			
-			uchar k[TAPIOCA_MAX_VALUE_SIZE];
-			uchar v[TAPIOCA_MAX_VALUE_SIZE];
-			memset(k,0, TAPIOCA_MAX_VALUE_SIZE);
-			memset(v,0, TAPIOCA_MAX_VALUE_SIZE);
-			uchar *kptr = k;
-			int klen;
-			tapioca_bptree_id tbpt_id = tsession->tbpt_ids[i];
-			//construct_idx_buffer_from_row(k, old_data, &klen);
-			// TODO Need an easy way to extract the secondary key
-			// rv = tapioca_bptree_delete(thrloc->th, tbpt_id, )
+			rv = delete_from_index(old_data,i);
+			if (rv != BPTREE_OP_SUCCESS) return rv;
 			
+			size_t new_row_sz;
+			uchar *new_row = construct_tapioca_row_buffer(new_data, &new_row_sz);
 			
-			memset(k,0, TAPIOCA_MAX_VALUE_SIZE);
-			//construct_idx_buffer_from_row(k, new_data, &klen);
-			// This is terribly messy. We badly need to refactor the code
-			// for pulling out index values from the row buffers 
-			//insert_to_index(new_data, i, &tbpt_id, k, &klen, NULL, 0);
-			
+			rv = insert_to_index(new_data, i, new_row, new_row_sz);
+			if (rv != BPTREE_OP_SUCCESS) return rv;
 			
 		}
+	}
+	return BPTREE_OP_SUCCESS;
+	
+}
+
+int convert_to_mysql_error(int bptree_rv) 
+{
+	// TODO Make this more complete
+	switch (bptree_rv) {
+		case BPTREE_OP_KEY_NOT_FOUND:
+			return HA_ERR_KEY_NOT_FOUND;
+		case BPTREE_OP_EOF:
+			return HA_ERR_END_OF_FILE;
+		case BPTREE_ERR_DUPLICATE_KEY_INSERTED:
+			return HA_ERR_FOUND_DUPP_KEY;
+		case BPTREE_OP_SUCCESS:
+			return 0;
+		default:
+			return -1;
 	}
 	
 }
 
-
 int ha_tapioca::update_row(const uchar *old_data, uchar *new_data)
 {
 	DBUG_ENTER("ha_tapioca::update_row");
+	
 	int rv, dummy = 0;
 	assert(is_thrloc_sane(thrloc));
-	size_t pk_sz, old_row_sz, new_row_sz;
-    tapioca_bptree_id *tbptr;
-	tapioca_table_session *tsession;
-	if (!(tsession = (tapioca_table_session *) my_hash_search(&thrloc->tsessions,
-			(uchar*) full_table_name, strlen(full_table_name))))
-	{
-		DBUG_PRINT("ha_tapioca",
-				("Could not find tsession object for %s", full_table_name));
-		DBUG_RETURN(-1);
-	}
 
-	tbptr = tsession->tbpt_ids;
-
-    uchar *pk = construct_idx_buffer_from_row(new_data, &pk_sz, 
-											  table->s->primary_key, true);
-    //construct_pk_buffer_from_row(old_pk_ptr, (uchar *)old_data, &old_pk_size);
-    //old_pk_size += get_tapioca_header_size();
-
-	// TODO Stub:
-	get_row_difference(tsession, old_data, new_data);
+	rv = update_indexes(old_data, new_data);
+	if (rv != BPTREE_OP_SUCCESS)  DBUG_RETURN(convert_to_mysql_error(rv));
 	
- /* FIXME We still need to properly support updating of actual indexed values
-			and also to ensure we have changed any secondary keys if they
-			were changed */
- 
-/*  if(old_pk_size != pk_size || !memcmp(pk_ptr, old_pk_ptr, pk_size))
-    {
-    	// The primary key for this table has changed; we must delete/insert
-    	tapioca_bptree_delete(thrloc->th, tbptr[table->s->primary_key],
-    			old_pk, old_pk_size, &dummy, sizeof(int32_t));
-    	tapioca_bptree_insert(thrloc->th, tbptr[table->s->primary_key],	pk,
-    			pk_size, &dummy, sizeof(int32_t), BPTREE_INSERT_UNIQUE_KEY);
-    }
-    else {
-    	// We can call straight bptree_update
-    	//tapioca_bptree_update(thrloc->th, tbptr[table->s->primary_key],
-    	//		old_pk, pk_size, &dummy, sizeof(int32_t));
-    }
-*/
-    uchar *new_row = construct_tapioca_row_buffer(new_data, &new_row_sz);
+	tapioca_bptree_id tbpt_id = get_tbpt_id_for_idx(table->s->primary_key);
+	if (tbpt_id == -1) return -1;
+	
+	size_t pk_sz, new_row_sz;
+	uchar *pk;
+	uchar *new_row = construct_tapioca_row_buffer(new_data, &new_row_sz);
 	if (is_row_in_node)
 	{
-		rv = tapioca_bptree_update(thrloc->th, tbptr[table->s->primary_key],
-				pk, pk_sz, new_row, new_row_sz);
-		if (rv < 0) DBUG_RETURN (-1);
-		if (rv == BPTREE_OP_KEY_NOT_FOUND) DBUG_RETURN(HA_ERR_KEY_NOT_FOUND);
+		pk = construct_idx_buffer_from_row(new_data, &pk_sz, 
+											table->s->primary_key, false);
+		rv = tapioca_bptree_update(thrloc->th, tbpt_id, pk, pk_sz, 
+								   new_row, new_row_sz);
 	}
 	else
 	{
+		pk = construct_idx_buffer_from_row(new_data, &pk_sz, 
+											table->s->primary_key, true);
 		rv = tapioca_put(thrloc->th, pk, pk_sz, new_row, new_row_sz);
-		if(rv == -1) DBUG_RETURN (-1);
 	}
 
-	DBUG_RETURN(0);
+	DBUG_RETURN(convert_to_mysql_error(rv));
+
 }
 
 int ha_tapioca::delete_row(const uchar *buf)
 {
 	DBUG_ENTER("ha_tapioca::delete_row");
 	assert(is_thrloc_sane(thrloc));
-    int32_t buf_size = 0, old_pk_size;
-	size_t pk_sz;
-	int rv;
-	char dummy = 0;
-    tapioca_bptree_id *tbptr;
-	tapioca_table_session *tsession;
-	if (!(tsession = (tapioca_table_session *) my_hash_search(&thrloc->tsessions,
-			(uchar*) full_table_name, strlen(full_table_name))))
-	{
-		DBUG_PRINT("ha_tapioca",
-				("Could not find tsession object for %s", full_table_name));
-		DBUG_RETURN(-1);
-	}
-
-	tbptr = tsession->tbpt_ids;
-
-    uchar *pk = construct_idx_buffer_from_row(buf, &pk_sz, 
-											  table->s->primary_key, false);
-
-    rv = tapioca_bptree_delete(thrloc->th, tbptr[table->s->primary_key],
-    		pk, pk_sz, &dummy, 1);
-
-	// TODO Return a meaningful error code here
-	DBUG_RETURN(0);
+	
+	int rv = delete_from_index(buf, table->s->primary_key);
+	rv = convert_to_mysql_error(rv);
+	
+	DBUG_RETURN(rv);
 }
 
 uchar *ha_tapioca::write_tapioca_buffer_header(uchar *buf)
@@ -1061,7 +1057,7 @@ int ha_tapioca::index_read_idx(uchar* buf, uint keynr, const uchar* key,
 		uint key_len, enum ha_rkey_function find_flag)
 {
 	DBUG_ENTER("ha_tapioca::index_read_idx");
-	DBUG_RETURN( HA_ERR_WRONG_COMMAND);
+	DBUG_RETURN(HA_ERR_WRONG_COMMAND);
 }
 
 /*
@@ -1074,7 +1070,7 @@ int ha_tapioca::index_read_idx(uchar* buf, uint keynr, const uchar* key,
  * have to deduce whether this is a scan of exact PK match...
  */
 
-// FIXME REFACTOR ME
+// TODO REFACTOR ME
 int ha_tapioca::index_read(uchar * buf, const uchar * key, uint key_len,
 		enum ha_rkey_function find_flag)
 {
@@ -1087,33 +1083,56 @@ int ha_tapioca::index_read(uchar * buf, const uchar * key, uint key_len,
 	int32_t ksize, vsize;
 	int bps_id = (active_index == 64) ? 0 : active_index;
 
-	tapioca_table_session *tsession;
-	if (!(tsession = (tapioca_table_session *) my_hash_search(&thrloc->tsessions,
-			(uchar*) full_table_name, strlen(full_table_name))))
-	{
-		printf("TAPIOCA: Failed session lookup in index_read\n");
-		DBUG_RETURN(-1);
-	}
-
-	tapioca_bptree_id tbpt_id = tsession->tbpt_ids[bps_id];
+	tapioca_bptree_id tbpt_id = get_tbpt_id_for_idx(bps_id);
 	tapioca_handle *th = thrloc->th;
 
 	v = get_next_mem_slot();
 	vptr = write_tapioca_buffer_header(v);
-	k = construct_tapioca_key_buffer(key, key_len, &key_buf_sz);
-	kptr = pk_ptr = k;
+	pk_ptr = k;
 
-	if (key_len < get_pk_length(false) || active_index != table->s->primary_key)
+	// FIXME Make these scenarios much clearer and reduce the spaghetti
+	if (active_index == table->s->primary_key)
 	{
-		kptr += get_tapioca_header_size();
-		ksize = key_buf_sz - get_tapioca_header_size();
-		rv = tapioca_bptree_search(th, tbpt_id, kptr, ksize, vptr, &vsize);
+		k = construct_tapioca_key_buffer(key, key_len, &key_buf_sz, false);
+		rv = tapioca_bptree_search(th, tbpt_id, k, key_buf_sz, vptr, &vsize);
+		if(key_len == get_pk_length(false)) {
+			if (rv == BPTREE_OP_KEY_NOT_FOUND) DBUG_RETURN(HA_ERR_KEY_NOT_FOUND);
+		}
+		else 
+		{
+			if (rv == BPTREE_OP_KEY_NOT_FOUND)
+			{
+				rv = tapioca_bptree_index_next(th, tbpt_id,kptr,&ksize,vptr,&vsize);
+				if (rv != BPTREE_OP_KEY_FOUND) DBUG_RETURN(HA_ERR_KEY_NOT_FOUND);
+			}
+		}
+		// If this is an exact match, still want to ensure the cursor has been
+		// set correctly as some functions expect to traverse the index
+		uchar *kptr = k;
 
-		// FIXME This logic needs to be cleaned up, or a special error code
-		// for partial-key matches created so that we know to do a next()
+		kptr += get_tapioca_header_size();
+
+		// We could have been given a key that should return nothing
+		// so do one scan first
+		if (rv == BPTREE_OP_KEY_NOT_FOUND)
+		{
+			rv = tapioca_bptree_index_next(th, tbpt_id,kptr,&ksize,vptr,&vsize);
+			if (rv != BPTREE_OP_KEY_FOUND) DBUG_RETURN(HA_ERR_KEY_NOT_FOUND);
+		}
+		if (rv < 0)
+		{
+			printf("TAPIOCA: Exception in exact bpt_search in index_read\n");
+			DBUG_RETURN(-1);
+		}
+	}
+	else if (active_index != table->s->primary_key)
+	{
+		// 
+		rv = tapioca_bptree_search(th, tbpt_id, kptr, key_buf_sz, vptr, &vsize);
+
 		if (rv == BPTREE_OP_KEY_NOT_FOUND) 
 		{
-			rv = tapioca_bptree_index_next(th,tbpt_id,kptr,&ksize,vptr,&vsize);
+			rv = tapioca_bptree_index_next(th,tbpt_id,k,&ksize,vptr,&vsize);
 			if (rv != BPTREE_OP_KEY_FOUND) DBUG_RETURN(HA_ERR_KEY_NOT_FOUND);
 		}
 		if (active_index == table->s->primary_key)
@@ -1130,36 +1149,18 @@ int ha_tapioca::index_read(uchar * buf, const uchar * key, uint key_len,
 			pk_size = vsize + get_tapioca_header_size();
 		}
 	}
-	else
-	{
-		// If this is an exact match, still want to ensure the cursor has been
-		// set correctly as some functions expect to traverse the index
-		uchar *kptr = k;
-
-		kptr += get_tapioca_header_size();
-
-		rv = tapioca_bptree_search(th, tbpt_id, kptr, 
-			key_buf_sz - get_tapioca_header_size(), vptr, &vsize);
-		// We could have been given a key that should return nothing
-		// so do one scan first
-		if (rv == BPTREE_OP_KEY_NOT_FOUND)
-		{
-			rv = tapioca_bptree_index_next(th, tbpt_id,kptr,&ksize,vptr,&vsize);
-			if (rv != BPTREE_OP_KEY_FOUND) DBUG_RETURN(HA_ERR_KEY_NOT_FOUND);
-		}
-		if (rv < 0)
-		{
-			printf("TAPIOCA: Exception in exact bpt_search in index_read\n");
-			DBUG_RETURN(-1);
-		}
+	else {
+		// here be dragons
+		DBUG_RETURN(-1);
 	}
 
 	if (is_row_in_node && (active_index == table->s->primary_key))
 	{
 		rv = unpack_row_into_buffer(buf, vptr);
 	}
-	else {
-		rv = read_index_key(buf, pk_ptr, v,
+	else 
+	{
+		rv = read_index_key(buf, pk_ptr, 
 				get_tapioca_header_size() + get_pk_length(true));
 	}
 
@@ -1167,140 +1168,6 @@ int ha_tapioca::index_read(uchar * buf, const uchar * key, uint key_len,
 	DBUG_RETURN(rv);
 }
 
-/* FIXME This method is still broken; we probably should move all the
- * buffering logic into tapioca
-*/
-/*
-int ha_tapioca::index_fetch_buffered(uchar *buf, bool first)
-{
-	DBUG_ENTER("ha_tapioca::index_fetch_buffered");
-	assert(is_thrloc_sane(thrloc));
-	int ksize, vsize,  rv = -1;
-	int *pk_size;
-	uchar rowbuf[TAPIOCA_MAX_VALUE_SIZE];
-	uchar *pk_ptr;
-	bool first_flag = first;
-	bool has_rows = true;
-	int bps_id = active_index;
-
-	if (active_index == 64) bps_id = 0;
-
-	tapioca_table_session *tsession;
-
-	if (!(tsession = (tapioca_table_session *) my_hash_search(&thrloc->tsessions,
-			(uchar*) full_table_name, strlen(full_table_name))))
-	{
-		printf("TAPIOCA: session lookup failure in idx_ftch_buff\n");
-		DBUG_RETURN(-1);
-	}
-
-	assert(is_thrloc_sane(thrloc));
-
-	tapioca_bptree_id tbpt_id = tsession->tbpt_ids[bps_id];
-
-	// Buffer is empty, or, we are starting a new scan; fill it up
-	if(thrloc->val_buf_sz <= 0 || thrloc->val_buf_pos >= thrloc->val_buf_sz
-			|| first)
-	{
-		rv = prefetch_tapioca_rows(tbpt_id, first, thrloc, tsession, &has_rows);
-		switch (rv) {
-			case BPTREE_OP_KEY_NOT_FOUND:
-				DBUG_RETURN(HA_ERR_END_OF_FILE);
-				break;
-			case BPTREE_OP_KEY_FOUND:
-				break;
-			default:
-				printf("Error on row prefetch %d\n", rv);
-				DBUG_RETURN(-1);
-				break;
-		}
-	}
-
-	if (has_rows)
-	{
-		unpack_row_into_buffer(buf,thrloc->val_buf[thrloc->val_buf_pos]);
-		//thrloc->val_buf_pos++;
-		DBUG_RETURN(0);
-	} else
-	{
-		//thrloc->val_buf_pos = 0;
-		//thrloc->val_buf_sz = 0;
-		DBUG_RETURN(HA_ERR_END_OF_FILE);
-	}
-}
-
-int ha_tapioca::prefetch_tapioca_rows(tapioca_bptree_id tbpt_id, bool first,
-		tapioca_thrloc *thrloc, tapioca_table_session *tsession, bool *has_rows)
-{
-	DBUG_ENTER("ha_tapioca::prefetch_tapioca_rows");
-	int ksize, vsize,  rv, mgets;
-	int16_t keys_read = 0;
-	*has_rows = false;
-	bptree_mget_result *bmres, *cur;
-	mget_result *mres;
-	rv = 1;
-	tapioca_handle *th = thrloc->th;
-	uchar k[TAPIOCA_MAX_VALUE_SIZE];
-	uchar v[TAPIOCA_MAX_VALUE_SIZE];
-	uchar *kptr = write_tapioca_buffer_header(k);
-	uchar *vptr = write_tapioca_buffer_header(v);
-	uchar *pk_ptr;
-	int *pk_size;
-	if (tbpt_id == tsession->tbpt_ids[table->s->primary_key])
-	{
-		pk_ptr = k;
-		pk_size = &ksize;
-	} else
-	{
-		pk_ptr = v;
-		pk_size = &vsize;
-	}
-	if (first)
-	{
-		rv = tapioca_bptree_index_first_no_key(th, tbpt_id);
-		if (rv != BPTREE_OP_KEY_FOUND) goto prefetch_error;
-	}
-
-	rv = tapioca_bptree_index_next_mget(th, tbpt_id, &bmres, &keys_read);
-	if (rv != BPTREE_OP_KEY_FOUND) goto prefetch_error;
-
-	cur = bmres;
-	for (int i =1; i <= keys_read; i++)
-	{
-		memcpy(kptr, cur->k, cur->ksize);
-		memcpy(vptr, cur->v, cur->vsize);
-		ksize = cur->ksize;
-		vsize = cur->vsize;
-		tapioca_mget(th, pk_ptr, *pk_size+get_tapioca_header_size());
-		if(i < keys_read) cur = cur->next;
-	}
-	mres = tapioca_mget_commit(th);
-	mgets = 0;
-
-	while(mget_result_count(mres) > 0)
-	{
-		int bytes;
-		bytes = mget_result_consume(mres, thrloc->val_buf[mgets]);
-		mgets++;
-	}
-	assert(mgets == keys_read);
-
-	//thrloc->val_buf_sz = keys_read;
-	//thrloc->val_buf_pos = 0;
-	// only if we have had no luck buffering new rows is this false
-	*has_rows = (keys_read > 0);
-	assert(is_thrloc_sane(thrloc));
-	DBUG_RETURN(rv);
-
-prefetch_error:
-	//thrloc->val_buf_sz = 0;
-	//thrloc->val_buf_pos = 0;
-	*has_rows = false;
-	DBUG_RETURN(rv);
-
-}
-
-	*/
 /*@
  * Return the row for the given primary key
  * Expects *k to contain a valid key buffer and *rowbuf to be an empty area
@@ -1310,10 +1177,11 @@ prefetch_error:
  * If we store the row in the PK index, this will do a search; otherwise it
  * will be a direct get to tapioca
  */
-int ha_tapioca::read_index_key(uchar *buf, uchar *k, uchar *rowbuf, int ksize)
+int ha_tapioca::read_index_key(uchar *buf, uchar *k, int ksize)
 {
 	DBUG_ENTER("ha_tapioca::read_index_key");
 	int rv, vsize;
+	uchar *rowbuf = get_next_mem_slot();
 	if (is_row_in_node)
 	{
 		// We want to skip the tapioca row header stuff
@@ -1332,30 +1200,17 @@ int ha_tapioca::read_index_key(uchar *buf, uchar *k, uchar *rowbuf, int ksize)
 	DBUG_RETURN(rv);
 }
 
-tapioca_handle * ha_tapioca::get_current_tapioca_handle()
-{
-	DBUG_ENTER("ha_tapioca::get_current_tapioca_handle");
-	assert(is_thrloc_sane(thrloc));
-	DBUG_RETURN(thrloc->th);
-
-}
-
-// We'll leave this method unchanged for now and create a new buffered read
-// method that will first be used by rnd_next()
 int ha_tapioca::index_fetch(uchar *buf, bool first)
 {
 	DBUG_ENTER("ha_tapioca::index_fetch");
 	assert(is_thrloc_sane(thrloc));
-	// Just in case we somehow enter here again
-	// FIXME Clean up these allocations
 	int ksize, vsize, pk_size, rv;
-	uchar k[TAPIOCA_MAX_VALUE_SIZE];
-	uchar v[TAPIOCA_MAX_VALUE_SIZE];
-	uchar rowbuf[TAPIOCA_MAX_VALUE_SIZE];
-	uchar *kptr = write_tapioca_buffer_header(k);
-	uchar *vptr = write_tapioca_buffer_header(v);
-	uchar *pk_ptr;
+	uchar *k, *v, *kptr, *vptr, *pk_ptr; 
 	tapioca_handle *th;
+	k = get_next_mem_slot();
+	v = get_next_mem_slot();
+	kptr = write_tapioca_buffer_header(k);
+	vptr = write_tapioca_buffer_header(v);
 	int bps_id = active_index;
 	// It seems that active_index 64 means "no" index; so we want the primary
 	if (active_index == 64) bps_id = 0;
@@ -1403,8 +1258,7 @@ int ha_tapioca::index_fetch(uchar *buf, bool first)
 		}
 		else
 		{
-			rv = read_index_key(buf, pk_ptr, rowbuf,
-					pk_size + get_tapioca_header_size());
+			rv = read_index_key(buf, pk_ptr, pk_size+get_tapioca_header_size());
 		}
 
 		DBUG_RETURN(rv);
@@ -1529,10 +1383,9 @@ int ha_tapioca::rnd_pos(uchar *buf, uchar *pos)
 {
 	DBUG_ENTER("ha_tapioca::rnd_pos");
 	int rv;
-	uchar rowbuf[TAPIOCA_MAX_VALUE_SIZE];
 	tapioca_bptree_id tbpt_id;
 
-	rv = read_index_key(buf, pos, rowbuf, ref_length );
+	rv = read_index_key(buf, pos, ref_length );
 
 	DBUG_RETURN(rv);
 }
