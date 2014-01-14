@@ -6,10 +6,11 @@ CLEARDB="n"
 KILL="n"
 NOREC="n"
 
-SHORTOPTS="hb:tksp:l:"
-LONGOPTS="help,basedir:,trace,kill-all,shutdown,purge-schema-dir:,launch-in:"
+SHORTOPTS="hb:tksp:l:d:"
+LONGOPTS="help,basedir:,trace,kill-all,shutdown,purge-schema-dir:,launch-in:,datadir:"
 
 BASEDIR=~/local/mysql
+DATADIR=~/local/mysql/data
 BUILDDIR=~/local/mosql-se/
 LIB=libmosqlse.so
 MYSQLCNF=my.cnf
@@ -58,6 +59,10 @@ while true; do
 		shift
 		BASEDIR=$1
 		;;
+      -d|--datadir) 
+		shift
+		DATADIR=$1
+		;;
       -t|--trace) 
 		EXTRAPARAMS="$EXTRAPARAMS --debug=$DEBUGPARAMS"
 		;;
@@ -105,7 +110,7 @@ fi
 set -e
 
 #BASEPARAMS="--defaults-file=$BASEDIR/$MYSQLCNF  --skip-syslog --basedir=$BASEDIR --datadir=$BASEDIR/data --log-error=$BASEDIR/debug.err --lower_case_table_names=1 " #  2> /dev/null &" 
-BASEPARAMS="--defaults-file=$BASEDIR/$MYSQLCNF  --basedir=$BASEDIR --datadir=$BASEDIR/data --log-error=$BASEDIR/debug.err --lower_case_table_names=1 " #  2> /dev/null &" 
+BASEPARAMS="--defaults-file=$BASEDIR/$MYSQLCNF  --basedir=$BASEDIR --datadir=$DATADIR --log-error=$BASEDIR/debug.err --lower_case_table_names=1 " #  2> /dev/null &" 
 
 cd $BASEDIR
 nohup bin/mysqld_safe $BASEPARAMS $EXTRAPARAMS 2> /dev/null &
