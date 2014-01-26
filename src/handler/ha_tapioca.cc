@@ -171,6 +171,7 @@ static int tapioca_init_func(void *p)
 	DBUG_ENTER("tapioca_init_func");
 	tapioca_hton = (handlerton *) p;
 	int rv;
+	srand(time(NULL));
 
 	pthread_mutex_init(&tapioca_mutex, MY_MUTEX_INIT_FAST);
 	(void) my_hash_init(&tapioca_open_tables, system_charset_info, 32, 0, 0,
@@ -633,8 +634,15 @@ uchar * ha_tapioca::construct_idx_buffer_from_row(const uchar *buf, size_t *buf_
 	{
 		// TODO Implement proper null handling
 		Field *field = key_part->field;
-		//pk_ptr = field->pack(pk_ptr, buf + field->offset(buf));
-		kptr = field->pack(kptr, buf + (field->ptr - buf));
+		// FIXME Quick hack to "support" autoinc; 
+		if (table->next_number_field == field) {
+			kptr = field->pack(kptr, (const uchar *)&current_auto_inc);
+		}
+		else
+		{
+			//pk_ptr = field->pack(pk_ptr, buf + field->offset(buf));
+			kptr = field->pack(kptr, buf + (field->ptr - buf));
+		}
 	}
     *buf_sz = (int)((kptr - k));
     DBUG_PRINT("ha_tapioca", ("Generated pk buffer size %d", *buf_sz));
@@ -664,7 +672,15 @@ uchar * ha_tapioca::construct_tapioca_row_buffer(const uchar *buf, size_t * buf_
     for(Field **field = table->field; *field; field++){
         if(!((*field)->is_null())){
             //vptr = (*field)->pack(vptr, buf + (*field)->offset(buf));
-            vptr = (*field)->pack(vptr, buf + ((*field)->ptr - buf));
+			// FIXME Quick hack to "support" autoinc; 
+			if (table->next_number_field == (*field)) {
+				//uint32_t autoinc = current_auto_inc; // rand();
+				vptr = (*field)->pack(vptr, (const uchar *)&current_auto_inc);
+			}
+			else 
+			{
+				vptr = (*field)->pack(vptr, buf + ((*field)->ptr - buf));
+			}
         }
     }
 
@@ -804,6 +820,9 @@ int ha_tapioca::write_row(uchar *buf)
 		tapioca_commit(thrloc->th);
 
 	fn_pos = 1;
+	if (table->next_number_field) {
+		current_auto_inc = rand();
+	}
 
     uchar *row_tmp = construct_tapioca_row_buffer(buf, &row_sz);
 	// This row will be relatively long lived, make a copy from slot
