@@ -146,7 +146,7 @@ class ha_tapioca: public handler
 	tapioca_thrloc *thrloc;
 	int rows_written;
 	int write_rows;
-	int current_auto_inc;
+	int32_t current_auto_inc;
 	int32_t tapioca_table_id;
 	char full_table_name[TAPIOCA_MAX_TABLE_NAME_LEN];
 	int handler_tapioca_client_id;
@@ -213,15 +213,14 @@ public:
 //		  HA_CAN_INDEX_BLOBS |
 		  HA_FAST_KEY_READ |  // stable
 //		  HA_CAN_SQL_HANDLER |
-//		  HA_REQUIRE_PRIMARY_KEY |  // stable
+		  HA_REQUIRE_PRIMARY_KEY |  // stable
 		  HA_PRIMARY_KEY_REQUIRED_FOR_POSITION |
 //		  HA_PRIMARY_KEY_REQUIRED_FOR_DELETE |
 //		  HA_PRIMARY_KEY_IN_READ_INDEX |
-		  HA_NO_AUTO_INCREMENT   // stable
+//		  HA_NO_AUTO_INCREMENT   // stable
 //		  HA_BINLOG_ROW_CAPABLE
 //		  HA_CAN_GEOMETRY |
 //		  HA_PARTIAL_COLUMN_READ
-		  |
 		  HA_TABLE_SCAN_ON_INDEX  // for ORDER BY?
 		  );
     }
