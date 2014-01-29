@@ -177,8 +177,8 @@ private:
     	tapioca_thrloc *thrloc, tapioca_table_session *tsession, bool *has_rows);
     tapioca_handle * get_current_tapioca_handle();
     uchar * construct_tapioca_row_buffer(const uchar *buf, size_t * buf_sz);
-	uchar * construct_tapioca_key_buffer(const uchar *key, uint key_len, size_t *buf_sz,
-											bool incl_header);
+	uchar * construct_tapioca_key_buffer(const uchar *key, uint key_len, uint idx, 
+										 size_t *buf_sz, bool incl_header);
     uchar * construct_idx_buffer_from_row(const uchar *buf, size_t *buf_sz, int idx, 
 											bool incl_header);
 	int update_indexes(const uchar *old_data, const uchar *new_data);
@@ -189,6 +189,7 @@ private:
 	
 	tapioca_bptree_id get_tbpt_id_for_idx(int idx);
 	
+	inline bool is_index_buffer_exact_match(uint index, key_part_map keypart_map);
 public:
     ha_tapioca(handlerton *hton, TABLE_SHARE *table_arg);
     ~ha_tapioca()
@@ -271,12 +272,15 @@ public:
     int write_all_indexes(uchar *buf, uchar *row, size_t row_sz);
     int update_row(const uchar *old_data, uchar *new_data);
     int delete_row(const uchar *buf);
-    int index_read(uchar *buf, const uchar *key, uint key_len,
-    		enum ha_rkey_function find_flag);
     int index_next(uchar *buf);
     int index_prev(uchar *buf);
     int index_first(uchar *buf);
     int index_last(uchar *buf);
+    int index_read(uchar *buf, const uchar *key, uint key_len,
+    		enum ha_rkey_function find_flag);
+	int index_read_idx_map(uchar *buf, uint index, const uchar *key,
+                                  key_part_map keypart_map,
+                                  enum ha_rkey_function find_flag);
 	int index_read_idx(uchar* buf, uint keynr, const uchar* key, uint key_len,
 			enum ha_rkey_function find_flag);
 	int rnd_init(bool scan);
