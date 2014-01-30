@@ -190,6 +190,8 @@ private:
 	tapioca_bptree_id get_tbpt_id_for_idx(int idx);
 	
 	inline bool is_index_buffer_exact_match(uint index, key_part_map keypart_map);
+	
+	inline int is_field_null(Field *field, const uchar *buf);
 public:
     ha_tapioca(handlerton *hton, TABLE_SHARE *table_arg);
     ~ha_tapioca()
@@ -278,11 +280,11 @@ public:
     int index_last(uchar *buf);
     int index_read(uchar *buf, const uchar *key, uint key_len,
     		enum ha_rkey_function find_flag);
-	int index_read_idx_map(uchar *buf, uint index, const uchar *key,
-                                  key_part_map keypart_map,
-                                  enum ha_rkey_function find_flag);
-	int index_read_idx(uchar* buf, uint keynr, const uchar* key, uint key_len,
-			enum ha_rkey_function find_flag);
+	//int index_read_idx_map(uchar *buf, uint index, const uchar *key,
+     //                             key_part_map keypart_map,
+      //                            enum ha_rkey_function find_flag);
+	//int index_read_idx(uchar* buf, uint keynr, const uchar* key, uint key_len,
+	//		enum ha_rkey_function find_flag);
 	int rnd_init(bool scan);
 	int rnd_end();
 	int rnd_next(uchar *buf);
