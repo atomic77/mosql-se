@@ -523,6 +523,7 @@ int ha_tapioca::open(const char *name, int mode, uint test_if_locked)
 
 	pthread_mutex_unlock(&tapioca_mutex);
 
+	memset(tmp_row_buf,0,TAPIOCA_MAX_VALUE_SIZE);
 	thr_lock_data_init(&share->lock, &lock, NULL);
 
 	DBUG_RETURN(0);
@@ -878,9 +879,8 @@ int ha_tapioca::write_row(uchar *buf)
 
     uchar *row_tmp = construct_tapioca_row_buffer(buf, &row_sz);
 	// This row will be relatively long lived, make a copy from slot
-	uchar *row = (uchar *)my_malloc(row_sz, MYF(0));
-	memcpy(row, row_tmp, row_sz);
-    rv = write_all_indexes(buf, row, row_sz);
+	memcpy(tmp_row_buf, row_tmp, row_sz);
+    rv = write_all_indexes(buf, tmp_row_buf, row_sz);
 
 	if(rv > 0) DBUG_RETURN(rv);
 	if (rv < 0) goto write_exception;
@@ -892,12 +892,12 @@ int ha_tapioca::write_row(uchar *buf)
 	{
 		uchar *pk = construct_idx_buffer_from_row(buf, &pk_sz, 
 												  table->s->primary_key, true);
-		if (tapioca_put(thrloc->th, pk, pk_sz, row, row_sz) == -1) goto write_exception;
+		if (tapioca_put(thrloc->th, pk, pk_sz, tmp_row_buf, row_sz) == -1) 
+			goto write_exception;
 	}
 
 	fn_pos = 3;
 	write_rows++;
-	my_free(row, MYF(0));
 
 	statistic_increment(table->in_use->status_var.ha_write_count, &LOCK_status);
 	statistic_increment(stats.records, &LOCK_status);
@@ -1205,7 +1205,7 @@ int ha_tapioca::index_read(uchar * buf, const uchar * key, uint key_len,
 		{
 			if (rv == BPTREE_OP_KEY_NOT_FOUND)
 			{
-				rv = tapioca_bptree_index_next(th, tbpt_id,kptr,&ksize,vptr,&vsize);
+				//rv = tapioca_bptree_index_next(th, tbpt_id,kptr,&ksize,vptr,&vsize);
 				if (rv != BPTREE_OP_KEY_FOUND) DBUG_RETURN(HA_ERR_KEY_NOT_FOUND);
 			}
 		}
@@ -1309,7 +1309,6 @@ int ha_tapioca::index_fetch(uchar *buf, bool first)
 	assert(is_thrloc_sane(thrloc));
 	int ksize, vsize, pk_size, rv;
 	uchar *k, *v, *kptr, *vptr, *pk_ptr; 
-	tapioca_handle *th;
 	k = get_next_mem_slot();
 	v = get_next_mem_slot();
 	kptr = write_tapioca_buffer_header(k);
@@ -1318,17 +1317,8 @@ int ha_tapioca::index_fetch(uchar *buf, bool first)
 	// It seems that active_index 64 means "no" index; so we want the primary
 	if (active_index == 64) bps_id = 0;
 
-	tapioca_table_session *tsession;
-
-	if (!(tsession = (tapioca_table_session *) my_hash_search(&thrloc->tsessions,
-			(uchar*) full_table_name, strlen(full_table_name))))
-	{
-		printf("TAPIOCA: Exception in session lookup in idx_ftch\n");
-		DBUG_RETURN(-1);
-	}
-
-	th = thrloc->th;
-	tapioca_bptree_id tbpt_id = tsession->tbpt_ids[bps_id];
+	tapioca_bptree_id tbpt_id = get_tbpt_id_for_idx(bps_id);
+	tapioca_handle *th = thrloc->th;
 
 	if (first)
 	{
@@ -1341,7 +1331,7 @@ int ha_tapioca::index_fetch(uchar *buf, bool first)
 
 	// If this is the primary key; the key buffer is the key itself;
 	// otherwise it's pointed to in the value
-	if (tbpt_id == tsession->tbpt_ids[table->s->primary_key])
+	if (active_index == table->s->primary_key)
 	{
 		pk_ptr = k;
 		pk_size = ksize;

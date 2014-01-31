@@ -154,6 +154,8 @@ class ha_tapioca: public handler
 	bool handler_opened ; // did this object ever pass through ::open?!
 	bool is_row_in_node; // Does this table store the row in the bnode?
 //	bool tapioca_write_opened;
+	uchar tmp_row_buf[TAPIOCA_MAX_VALUE_SIZE]; // a place for weary data to rest
+
 
 private:
 	int init_tapioca_writer();
