@@ -6,9 +6,9 @@ USE test1;
 
 
 CREATE TABLE v
-(v VARCHAR(32) NOT NULL,
- i integer, 
-primary key (v)) 
+(c VARCHAR(32) NOT NULL, 
+i integer, 
+primary key (c)) 
 ENGINE=MoSQL;
 
 INSERT INTO v VALUES ('AAAABBBB',123);
@@ -29,15 +29,14 @@ ENGINE=MoSQL;
 INSERT INTO w VALUES ('AAAABBBB','aaaaaaasaaa',123);
 INSERT INTO w VALUES ('EEEEBBBB','aaaaaaaaaaa',123);
 INSERT INTO w VALUES ('ASDFBBBB','aaaaaadddaa',123);
-INSERT INTO w VALUES ('AAA','aaaaaaasdfasdf',123);
+INSERT INTO w VALUES ('AAAAABCB','aaaasdfasdf',123);
 INSERT INTO w VALUES ('AABBBB','aaaaaaaaasdfa',123);
 
 
 
 CREATE TABLE t5
 (v VARCHAR(32) NOT NULL,
-w VARCHAR(64) NOT NULL,
- i integer, 
+w VARCHAR(64) NOT NULL,,
 primary key (v),
 key `asdf` (w)) 
 ENGINE=MoSQL;

@@ -23,6 +23,8 @@ insert into t values (4,7,9,'o');
 
 SELECT * FROM t;
 select * from t where a = 1 and b = 4;
+select * from t where a = 3 and b = 6;
+select * from t where a = 3 and b = 5;
 
 -- the key query (pardon the pun...)	
 select * from t where a = 1;
