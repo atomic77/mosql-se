@@ -36,7 +36,8 @@ INSERT INTO w VALUES ('AABBBB','aaaaaaaaasdfa',123);
 
 CREATE TABLE t5
 (v VARCHAR(32) NOT NULL,
-w VARCHAR(64) NOT NULL,,
+w VARCHAR(64) NOT NULL,
+i int,
 primary key (v),
 key `asdf` (w)) 
 ENGINE=MoSQL;

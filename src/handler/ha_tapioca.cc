@@ -794,33 +794,26 @@ int ha_tapioca::insert_to_index(const uchar *buf, int idx, uchar *row, size_t ro
 	{
 		sk = construct_idx_buffer_from_row(buf, &sk_sz, idx, false);
 	}
-	KEY *key_info = &table->key_info[idx];
-	bptree_insert_flags insert_flags = BPTREE_INSERT_ALLOW_DUPES;
-	if (key_info->flags & HA_NOSAME)
-	{
-		insert_flags = BPTREE_INSERT_UNIQUE_KEY;
-	}
-
 	
 	if (idx == table->s->primary_key)
 	{
 		if(is_row_in_node)
 		{
 			rv = tapioca_bptree_insert(thrloc->th, tbpt_id, pk, pk_sz,
-					row, row_sz, insert_flags);
+					row, row_sz);
 		}
 		else
 		{
 			char nb = '\0';
 			rv = tapioca_bptree_insert(thrloc->th, tbpt_id, pk, pk_sz, 
-					(void *) &nb, 1, insert_flags);
+					(void *) &nb, 1);
 		}
 	}
 	else
 	{
 		// This is a secondary key; the 'value' is the primary key buffer itself
 		rv = tapioca_bptree_insert(thrloc->th, tbpt_id, sk, sk_sz,
-								   pk, pk_sz, insert_flags);
+								   pk, pk_sz);
 	}
 	return(rv);
 }
@@ -1571,8 +1564,15 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 		// been initialized, and we are simply starting a new session
 		printf("CONNECT to table %s idx %d bpt %d with exec id %d\n",
 			table->s->table_name.str, i, bpt_info->bpt_id, new_bptree_exec_id);
+		
+		bptree_insert_flags insert_flags = BPTREE_INSERT_ALLOW_DUPES;
+		if (key_info->flags & HA_NOSAME)
+		{
+				insert_flags = BPTREE_INSERT_UNIQUE_KEY;
+		}
 		*tbptr = tapioca_bptree_initialize_bpt_session_no_commit(thrloc->th,
-				bpt_info->bpt_id, BPTREE_OPEN_ONLY, new_bptree_exec_id);
+				bpt_info->bpt_id, BPTREE_OPEN_ONLY, insert_flags, 
+				new_bptree_exec_id);
 
 		if (*tbptr < 0) DBUG_RETURN(NULL);
 
@@ -1616,13 +1616,20 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 						BPTREE_FIELD_COMP_INT_64);
 				break;
 			case MYSQL_TYPE_VARCHAR:
+				// TODO Find out proper way to do collation; use memcmp for now
+				printf("Setting bpt %d index part %d to varchar memcmp\n",
+						*tbptr, j);
+				tapioca_bptree_set_field_info(thrloc->th, *tbptr, j,
+						key_part->store_length,
+						//key_part->field->max_data_length(),
+						BPTREE_FIELD_COMP_MYSQL_STRNCMP);
+				break;
 			case MYSQL_TYPE_STRING:
 				// TODO Find out proper way to do collation; use memcmp for now
 				printf("Setting bpt %d index part %d to char memcmp\n",
 						*tbptr, j);
 				tapioca_bptree_set_field_info(thrloc->th, *tbptr, j,
-						key_part->store_length,
-						//key_part->field->max_data_length(),
+						key_part->field->max_data_length(),
 						BPTREE_FIELD_COMP_MYSQL_STRNCMP);
 				break;
 			default:
@@ -2150,8 +2157,7 @@ int ha_tapioca::create(const char *name, TABLE *table_arg,
 			fn_pos = 3;
 			printf(" key idx %d name %s key flags %ld \n", i, ki->name,
 					ki->flags);
-			int16_t is_pk = (i == table_arg->s->primary_key);
-			rv = create_new_bpt_id(name, ki->name, is_pk);
+			rv = create_new_bpt_id(name, ki->name, table_arg, i);
 			if (rv == -1) goto create_exception;
 
 			ki++;
@@ -2177,7 +2183,7 @@ int ha_tapioca::create(const char *name, TABLE *table_arg,
 }
 
 int ha_tapioca::create_new_bpt_id(const char *table_name,
-		const char *index_name, int16_t is_pk)
+		const char *index_name, TABLE *table_arg, int idx)
 {
 	DBUG_ENTER("ha_tapioca::create_new_bpt_id");
 	int rv, mk = 0;
@@ -2190,7 +2196,7 @@ int ha_tapioca::create_new_bpt_id(const char *table_name,
 			sizeof(struct tapioca_bptree_info), MYF(0));
 
 	bpt_info->bpt_id = -1;
-	bpt_info->is_pk = is_pk;
+	bpt_info->is_pk = (idx == table_arg->s->primary_key);
 	bpt_info->is_active = 1;
 
 	// Here we will get the bptid as part of a sequence maintain inside tapioca
@@ -2208,12 +2214,19 @@ int ha_tapioca::create_new_bpt_id(const char *table_name,
 	strncpy(bpt_info->full_index_name, full_index_name, 128);
 
 	mk = 1;
+    KEY *key_info = &table_arg->key_info[idx];
+    bptree_insert_flags insert_flags = BPTREE_INSERT_ALLOW_DUPES;
+    if (key_info->flags & HA_NOSAME)
+    {
+            insert_flags = BPTREE_INSERT_UNIQUE_KEY;
+    }
+
 
 	// Make sure the metadata is created on tapioca for this table
 	// Blow away whatever bpt_id might have existed there before;
 	//	it will then be ready for when ::open is called
 	tbps_ignored = tapioca_bptree_initialize_bpt_session(th_global,
-			bpt_info->bpt_id, BPTREE_OPEN_OVERWRITE);
+			bpt_info->bpt_id, BPTREE_OPEN_OVERWRITE, insert_flags);
 	mk = 2;
 	if (tbps_ignored < 0)
 	{

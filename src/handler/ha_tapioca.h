@@ -167,7 +167,7 @@ private:
     inline int get_pk_length(bool incl_string);
     inline int get_key_level(const uchar *key, int len);
     int create_new_bpt_id(const char *table_name, const char *index_name,
-    		int16_t is_pk);
+    	TABLE *table_arg, int idx);
     int index_fetch(uchar *buf, bool first);
     int index_fetch_buffered(uchar *buf, bool first);
     tapioca_table_session *initialize_new_bptree_thread_data();

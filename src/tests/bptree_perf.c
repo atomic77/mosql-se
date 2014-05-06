@@ -32,7 +32,8 @@ int test_ordered_insert(int keys, int bpt_id)
 	static int port = 5555;
 	tapioca_bptree_id tbpt_id;
 	th = tapioca_open("127.0.0.1", 5555);
-	tbpt_id = tapioca_bptree_initialize_bpt_session(th, bpt_id, BPTREE_OPEN_OVERWRITE);
+	tbpt_id = tapioca_bptree_initialize_bpt_session(th, bpt_id, BPTREE_OPEN_OVERWRITE,
+		BPTREE_INSERT_UNIQUE_KEY );
 	tapioca_bptree_set_num_fields(th, tbpt_id, 1);
 	tapioca_bptree_set_field_info(th, tbpt_id, 0, 7, BPTREE_FIELD_COMP_STRNCMP);
 
@@ -47,7 +48,7 @@ int test_ordered_insert(int keys, int bpt_id)
 		if (i == 42) {
 			int basdf= 0;
 		}
-		rv = tapioca_bptree_insert(th, tbpt_id, &k, 7, &v, 7, BPTREE_INSERT_UNIQUE_KEY);
+		rv = tapioca_bptree_insert(th, tbpt_id, &k, 7, &v, 7);
 		if (rv == BPTREE_ERR_DUPLICATE_KEY_INSERTED)
 		{
 			printf("Tried to insert duplicate key %s\n", k);
