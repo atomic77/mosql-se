@@ -684,9 +684,14 @@ uchar * ha_tapioca::construct_idx_buffer_from_row(const uchar *buf, size_t *buf_
 			kptr_new = field->pack(kptr, field->ptr);
 		}
 		
-		if (field->type() == MYSQL_TYPE_VARCHAR) 
-		{
+		// TODO Refactor this into something more sensible
+		if (field->type() == MYSQL_TYPE_VARCHAR)
+		{ 
 			kptr += key_part->store_length;
+		}
+		else if (field->type() == MYSQL_TYPE_STRING)
+		{
+			kptr += key_part->field->max_data_length();
 		}
 		else
 		{
