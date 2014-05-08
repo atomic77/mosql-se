@@ -106,7 +106,7 @@ INSERT INTO v VALUES (8, 4 );
 INSERT INTO v VALUES (9, 4 ); 
 INSERT INTO v VALUES (10, 5 ); 
 
-
+-- Fixed-length character
 DROP SCHEMA test1;
 CREATE SCHEMA test1;
 USE test1;
@@ -139,3 +139,43 @@ INSERT INTO v VALUES ('aaq', 'aao' );
 INSERT INTO v VALUES ('aar', 'aao' ); 
 INSERT INTO v VALUES ('aas', 'aao' ); 
 INSERT INTO v VALUES ('aat', 'aao' ); 
+
+select * from v where j = 'aaa';
+select * from v where j = 'aao';
+
+-- Variable-length character
+DROP SCHEMA test1;
+CREATE SCHEMA test1;
+USE test1;
+DROP TABLE IF EXISTS u;
+
+CREATE TABLE v (
+i VARCHAR(5) NOT NULL,
+j VARCHAR(10) NOT NULL,
+PRIMARY KEY (i),
+KEY `implicit_pk` (j)
+) ENGINE=MoSQL;
+
+INSERT INTO v VALUES ('aaa', 'aaa' ); 
+INSERT INTO v VALUES ('aab', 'aaa' ); 
+INSERT INTO v VALUES ('aac', 'aac' ); 
+INSERT INTO v VALUES ('aad', 'aac' ); 
+INSERT INTO v VALUES ('aae', 'aae' ); 
+INSERT INTO v VALUES ('aaf', 'aae' ); 
+INSERT INTO v VALUES ('aag', 'aag' ); 
+INSERT INTO v VALUES ('aah', 'aag' ); 
+INSERT INTO v VALUES ('aai', 'aai' ); 
+INSERT INTO v VALUES ('aaj', 'aao' ); 
+INSERT INTO v VALUES ('aak', 'aao' ); 
+INSERT INTO v VALUES ('aal', 'aao' ); 
+INSERT INTO v VALUES ('aam', 'aao' ); 
+INSERT INTO v VALUES ('aan', 'aao' ); 
+INSERT INTO v VALUES ('aao', 'aao' ); 
+INSERT INTO v VALUES ('aap', 'aao' ); 
+INSERT INTO v VALUES ('aaq', 'aao' ); 
+INSERT INTO v VALUES ('aar', 'aao' ); 
+INSERT INTO v VALUES ('aas', 'aao' ); 
+INSERT INTO v VALUES ('aat', 'aao' ); 
+
+select * from v where j = 'aaa';
+select * from v where j = 'aao';
