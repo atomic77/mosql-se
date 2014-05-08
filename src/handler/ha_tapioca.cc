@@ -625,6 +625,10 @@ uchar *ha_tapioca::construct_tapioca_key_buffer(const uchar *key, uint key_len,
 	for (; key_part != key_end; ++key_part)
 	{
 		Field *field = key_part->field;
+		if (field->null_ptr != NULL) {
+			// Field is nullable -- skip the null byte in the key buf
+			key_buf_offset += 1;
+		}
 		if (field->type() == MYSQL_TYPE_VARCHAR)  {
 			//Apparently the key-buf always encodes varchar lengths with 2 bytes
 			// but pack uses a 1/2 byte length
