@@ -55,6 +55,8 @@ extern "C"
 // On write do we first check if the key exists?
 //#define DEFENSIVE_INSERT
 #define TAPIOCA_MAX_NODES_PER_MYSQL 20
+// Number of thread-local slots of memory we create for storage engine ops
+#define MOSQL_NUM_MEM_SLOTS 10 
 //#if MYSQL_VERSION_ID>=50500
 //#include "sql_priv.h"
 //#include "my_global.h"
@@ -105,16 +107,9 @@ typedef struct st_tapioca_thrloc
 	int open_tables;
 	int th_enabled;
 	HASH tsessions;
-	// We should do this more cleanly but this code will eventually removed
-	// from this layer so this is fine for now
-#ifdef BPTREE_BUFFERING
-	unsigned char val_buf[TAPIOCA_MGET_BUFFER_SIZE][TAPIOCA_MAX_VALUE_BUFFER];
-#else
-	unsigned char val_buf[1][1];
-#endif
-	int val_buf_sz;
+	uchar *ring_buf; 
+	int ring_buf_pos;
 	int should_not_be_written;
-	int val_buf_pos;
 	int tapioca_client_id;
 
 } tapioca_thrloc;
@@ -133,13 +128,10 @@ typedef struct st_tapioca_node_config
 	int mysql_instance_num;
 } tapioca_node_config;
 
-int get_next_autoinc(const char *key, int keylen, int *autoinc);
 int ha_tapioca_commit(handlerton *hton, THD *thd, bool all);
 int ha_tapioca_rollback(handlerton *hton, THD *thd, bool all);
-void get_table_index_key(String *s, const char *table_name,
-		const char *index_name);
+void get_table_index_key(String *s, const char *table_name, const char *index_name);
 tapioca_bptree_info *
-//unmarshall_bptree_info(const void *buf, uint16_t *num_bptrees);
 unmarshall_bptree_info(const char *buf, size_t sz, uint16_t *num_bptrees);
 inline int get_tapioca_header_size();
 uint32_t get_next_bptree_execution_id(int node);
@@ -154,7 +146,7 @@ class ha_tapioca: public handler
 	tapioca_thrloc *thrloc;
 	int rows_written;
 	int write_rows;
-	int current_auto_inc;
+	int32_t current_auto_inc;
 	int32_t tapioca_table_id;
 	char full_table_name[TAPIOCA_MAX_TABLE_NAME_LEN];
 	int handler_tapioca_client_id;
@@ -162,33 +154,46 @@ class ha_tapioca: public handler
 	bool handler_opened ; // did this object ever pass through ::open?!
 	bool is_row_in_node; // Does this table store the row in the bnode?
 //	bool tapioca_write_opened;
+	uchar tmp_row_buf[TAPIOCA_MAX_VALUE_SIZE]; // a place for weary data to rest
+
 
 private:
 	int init_tapioca_writer();
 	tapioca_handle *init_tapioca_connection(int *node_id);
 	int get_tapioca_table_id(tapioca_handle *th);
-    int construct_tapioca_key_buffer(uchar *k, const uchar *key, uint key_len,
-    		int *final_key_len);
     int unpack_row_into_buffer(uchar *buf, uchar *v);
     uchar *write_tapioca_buffer_header(uchar *buf);
-    int read_index_key(uchar *buf, uchar *k, uchar *rowbuf, int ksize);
+    int read_index_key(uchar *buf, uchar *k, int ksize);
     inline int get_pk_length(bool incl_string);
     inline int get_key_level(const uchar *key, int len);
     int create_new_bpt_id(const char *table_name, const char *index_name,
-    		int16_t is_pk);
+    	TABLE *table_arg, int idx);
     int index_fetch(uchar *buf, bool first);
     int index_fetch_buffered(uchar *buf, bool first);
     tapioca_table_session *initialize_new_bptree_thread_data();
     void *initialize_thread_local_space();
-    uchar *marshall_bptree_info(int32_t *bsize);
+    uchar *marshall_bptree_info(size_t *buf_sz);
     int create_or_set_thrloc(THD *thd);
     int create_or_set_tsession(THD *thd);
     int prefetch_tapioca_rows(tapioca_bptree_id tbpt_id, bool first,
     	tapioca_thrloc *thrloc, tapioca_table_session *tsession, bool *has_rows);
-    void construct_pk_buffer_from_row(uchar *pk_buf, uchar *buf, int *pk_len);
     tapioca_handle * get_current_tapioca_handle();
-    void construct_tapioca_row_buffer(uchar *vptr, uchar *new_data,
-    		int32_t * buf_size);
+    uchar * construct_tapioca_row_buffer(const uchar *buf, size_t * buf_sz);
+	uchar * construct_tapioca_key_buffer(const uchar *key, uint key_len, uint idx, 
+										 size_t *buf_sz, bool incl_header);
+    uchar * construct_idx_buffer_from_row(const uchar *buf, size_t *buf_sz, int idx, 
+											bool incl_header);
+	int update_indexes(const uchar *old_data, const uchar *new_data);
+	int insert_to_index(const uchar *buf, int idx, uchar *row, size_t row_sz);
+	int delete_from_index(const uchar *buf, int idx);
+	
+	inline uchar * get_next_mem_slot();
+	
+	tapioca_bptree_id get_tbpt_id_for_idx(int idx);
+	
+	inline bool is_index_buffer_exact_match(uint index, key_part_map keypart_map);
+	
+	inline int is_field_null(Field *field, const uchar *buf);
 public:
     ha_tapioca(handlerton *hton, TABLE_SHARE *table_arg);
     ~ha_tapioca()
@@ -213,15 +218,14 @@ public:
 //		  HA_CAN_INDEX_BLOBS |
 		  HA_FAST_KEY_READ |  // stable
 //		  HA_CAN_SQL_HANDLER |
-//		  HA_REQUIRE_PRIMARY_KEY |  // stable
+		  HA_REQUIRE_PRIMARY_KEY |  // stable
 		  HA_PRIMARY_KEY_REQUIRED_FOR_POSITION |
 //		  HA_PRIMARY_KEY_REQUIRED_FOR_DELETE |
 //		  HA_PRIMARY_KEY_IN_READ_INDEX |
-		  HA_NO_AUTO_INCREMENT   // stable
+//		  HA_NO_AUTO_INCREMENT   // stable
 //		  HA_BINLOG_ROW_CAPABLE
 //		  HA_CAN_GEOMETRY |
 //		  HA_PARTIAL_COLUMN_READ
-		  |
 		  HA_TABLE_SCAN_ON_INDEX  // for ORDER BY?
 		  );
     }
@@ -269,18 +273,20 @@ public:
     int open(const char *name, int mode, uint test_if_locked);
     int close(void);
     int write_row(uchar *buf);
-    int write_index_data(uchar *buf, uchar *pk_buf, int *pk_len,
-    		uchar *pk_row, int pk_row_sz);
+    int write_all_indexes(uchar *buf, uchar *row, size_t row_sz);
     int update_row(const uchar *old_data, uchar *new_data);
     int delete_row(const uchar *buf);
-    int index_read(uchar *buf, const uchar *key, uint key_len,
-    		enum ha_rkey_function find_flag);
     int index_next(uchar *buf);
     int index_prev(uchar *buf);
     int index_first(uchar *buf);
     int index_last(uchar *buf);
-	int index_read_idx(uchar* buf, uint keynr, const uchar* key, uint key_len,
-			enum ha_rkey_function find_flag);
+    int index_read(uchar *buf, const uchar *key, uint key_len,
+    		enum ha_rkey_function find_flag);
+	//int index_read_idx_map(uchar *buf, uint index, const uchar *key,
+     //                             key_part_map keypart_map,
+      //                            enum ha_rkey_function find_flag);
+	//int index_read_idx(uchar* buf, uint keynr, const uchar* key, uint key_len,
+	//		enum ha_rkey_function find_flag);
 	int rnd_init(bool scan);
 	int rnd_end();
 	int rnd_next(uchar *buf);
