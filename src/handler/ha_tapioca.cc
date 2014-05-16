@@ -685,7 +685,7 @@ uchar * ha_tapioca::construct_idx_buffer_from_row(const uchar *buf, size_t *buf_
 		}
 		else
 		{
-			kptr_new = field->pack(kptr, field->ptr);
+			kptr_new = field->pack(kptr, buf + key_part->offset);
 		}
 		
 		// TODO Refactor this into something more sensible
