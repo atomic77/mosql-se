@@ -7,6 +7,7 @@ find_package(MYSQLSRC REQUIRED)
 find_package(MYSQL REQUIRED)
 find_package(LIBEVENT REQUIRED)
 find_package(MSGPACK REQUIRED)
+find_package(LIBUUID REQUIRED)
 
 SET (MYSQLCOMMONFLAGS "-mtune=native -DUNIV_MUST_NOT_INLINE -static-libgcc -fno-exceptions -fno-omit-frame-pointer -fno-strict-aliasing   -DMYSQL_DYNAMIC_PLUGIN -rdynamic ")
 

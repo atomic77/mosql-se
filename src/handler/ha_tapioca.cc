@@ -803,12 +803,24 @@ int ha_tapioca::insert_to_index(const uchar *buf, int idx, uchar *row, size_t ro
 {		
 	int rv;
 	size_t pk_sz, sk_sz;
+	uchar *pk;
+	uuid_t u;
 	
 	tapioca_bptree_id tbpt_id = get_tbpt_id_for_idx(idx);
 	if (tbpt_id == -1) return -1;
 	
-	uchar *pk = construct_idx_buffer_from_row(buf, &pk_sz, 
+	if(table_has_pk()) 
+	{
+		pk = construct_idx_buffer_from_row(buf, &pk_sz, 
 											  table->s->primary_key, false);
+	}
+	else 
+	{
+		uuid_generate(u);
+		pk = (uchar *) &u;
+		pk_sz = sizeof(uuid_t);
+	}
+	
 	sk_sz = pk_sz;
 	uchar *sk = pk;
 	if (idx != table->s->primary_key)
@@ -839,6 +851,12 @@ int ha_tapioca::insert_to_index(const uchar *buf, int idx, uchar *row, size_t ro
 	return(rv);
 }
 
+inline bool ha_tapioca::table_has_pk() {
+	// open_binary_frm() in table.cc:1545
+	// share->primary_key = MAX_KEY; // we do not have a primary key
+	return (table->s->primary_key != MAX_KEY);
+	
+}
 
 /*@
  *  Write out index data for this row buffer;
@@ -866,6 +884,27 @@ int ha_tapioca::write_all_indexes(uchar *buf, uchar *row, size_t row_sz)
 		{
 			DBUG_RETURN(HA_ERR_FOUND_DUPP_KEY);
 		}
+	}
+	
+	// FIXME Fix the copy/paste once we confirm this is working
+	if (!table_has_pk()) 
+	{
+		rv = insert_to_index(buf, MAX_KEY, row, row_sz);
+
+		if (rv == BPTREE_OP_RETRY_NEEDED) {
+			// Don't return an error here -- just flag the tx for rollback whenever
+			// it tries to commit
+			//DBUG_RETURN(HA_ERR_TOO_MANY_CONCURRENT_TRXS);
+			thrloc->tx_cant_commit = true;
+		}
+		else if (rv < 0) {
+			goto index_exception;
+		}
+		else if (rv == BPTREE_ERR_DUPLICATE_KEY_INSERTED)
+		{
+			DBUG_RETURN(HA_ERR_FOUND_DUPP_KEY);
+		}
+		
 	}
 
 	DBUG_RETURN(0);
@@ -927,7 +966,7 @@ tapioca_bptree_id ha_tapioca::get_tbpt_id_for_idx(int idx)
 {
 	tapioca_table_session *tsession;
 	
-	if (idx >= table->s->keys) return -1;
+	if (idx >= table->s->keys && idx != MAX_KEY) return -1;
 	if (!(tsession = (tapioca_table_session *) my_hash_search(&thrloc->tsessions,
 			(uchar*) full_table_name, strlen(full_table_name))))
 	{
@@ -1071,6 +1110,7 @@ inline int ha_tapioca::get_key_level(const uchar *key, int len)
 inline int ha_tapioca::get_pk_length()
 {
 	int size = 0;
+	if (!table_has_pk( )) return sizeof(uuid_t);
 	KEY pk_info = table->key_info[table->s->primary_key];
 	KEY_PART_INFO *key_part = pk_info.key_part;
 	KEY_PART_INFO *key_end = key_part + pk_info.key_parts;
@@ -1300,16 +1340,26 @@ int ha_tapioca::index_fetch(uchar *buf, bool first)
 	assert(is_thrloc_sane(thrloc));
 	int ksize, vsize, pk_size, rv;
 	uchar *k, *v, *kptr, *vptr, *pk_ptr; 
+	tapioca_bptree_id tbpt_id;
 	k = get_next_mem_slot();
 	v = get_next_mem_slot();
 	kptr = write_tapioca_buffer_header(k);
 	vptr = write_tapioca_buffer_header(v);
 	ref_length = get_pk_length();
-	int bps_id = active_index;
+/*	int bps_id = active_index;
 	// It seems that active_index 64 means "no" index; so we want the primary
 	if (active_index == 64) bps_id = 0;
 
-	tapioca_bptree_id tbpt_id = get_tbpt_id_for_idx(bps_id);
+	if (table_has_pk()) 
+	{
+		tbpt_id = get_tbpt_id_for_idx(bps_id);
+	}
+	else 
+	{
+		tbpt_id = get_tbpt_id_for_idx(bps_id);
+	}
+*/	
+	tbpt_id = get_tbpt_id_for_idx(active_index);
 	tapioca_handle *th = thrloc->th;
 
 	if (first)
@@ -1337,7 +1387,7 @@ int ha_tapioca::index_fetch(uchar *buf, bool first)
 	if (rv == BPTREE_OP_KEY_FOUND)
 	{
 		// FIXME DUH ! Only read the value as the row if this is the PK!
-		if (is_row_in_node && (bps_id == 0))
+		if (is_row_in_node && (active_index == table->s->primary_key))
 		{
 			rv = unpack_row_into_buffer(buf, vptr);
 		}
@@ -1518,36 +1568,34 @@ int ha_tapioca::delete_all_rows()
 tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 {
 	DBUG_ENTER("ha_tapioca::initialize_new_bptree_thread_data");
+	struct tapioca_bptree_info *bpt_info;
+	String full_index_str(TAPIOCA_MAX_TABLE_NAME_LEN * 2);
 	assert(is_thrloc_sane(thrloc));
 	tapioca_table_session *tsession = (tapioca_table_session *) my_malloc(
-			sizeof(tapioca_table_session), MYF(0));
+			sizeof(tapioca_table_session), MYF(MY_WME | MY_ZEROFILL));
 
+	// Quick and dirty way to support "index" 64
 	tsession->tbpt_ids = (tapioca_bptree_id *) my_malloc(
-			sizeof(tapioca_bptree_id) * table->s->keys, MYF(0));
+			sizeof(tapioca_bptree_id) * (MAX_KEY+1), MYF(MY_WME | MY_ZEROFILL));
 	assert (tsession != NULL);
 	assert (tsession->tbpt_ids != NULL);
 
-	// tbpt_id is now just a typdef of an int since we manage everything
-	// internally inside tapioca
 	tapioca_bptree_id *tbptr = tsession->tbpt_ids;
 
 	KEY* key_info = table->key_info;
 	for (int i = 0; i < table->s->keys; i++)
 	{
-		struct tapioca_bptree_info *bpt_info;
-		String full_index_str(TAPIOCA_MAX_TABLE_NAME_LEN * 2);
 		get_table_index_key(&full_index_str, full_table_name, key_info->name);
-		const char *full_index_name = full_index_str.ptr();
 
 		if (!(bpt_info = (struct tapioca_bptree_info *) my_hash_search(&tapioca_bptrees,
-				(uchar*) full_index_name, strlen(full_index_name))))
+				(uchar*) full_index_str.ptr(), strlen(full_index_str.ptr()))))
 		{
 			// Try to reload -- if we fail throw an error
 			uint16_t num_bptrees_read;
 			int rv = reload_tapioca_bptree_metadata(&num_bptrees_read);
 			if (num_bptrees_read <= 0) {
 				printf("TAPIOCA: Couldn't find bpt meta info for %s\n",
-					full_index_name);
+					full_index_str.ptr());
 			} else {
 				printf("Re-read %d trees from storage, try again\n",
 					   num_bptrees_read);
@@ -1654,6 +1702,32 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 		tbptr++;
 		key_info++;
 	}
+	
+	// TODO Stub: Connect to implict PK
+	if (!table_has_pk()) 
+	{
+		get_table_index_key(&full_index_str, full_table_name, 
+							MOSQL_IMPLICIT_PK_NAME);
+		
+		bpt_info = (struct tapioca_bptree_info *) my_hash_search(&tapioca_bptrees,
+				(uchar*) full_index_str.ptr(), strlen(full_index_str.ptr()) );
+		if(bpt_info == NULL || bpt_info->bpt_id == -1 ) DBUG_RETURN(NULL);
+		
+		uint32_t new_bptree_exec_id = get_next_bptree_execution_id(thrloc->node_id);
+		tapioca_bptree_id t =
+			tapioca_bptree_initialize_bpt_session_no_commit(thrloc->th,
+				bpt_info->bpt_id, BPTREE_OPEN_ONLY, BPTREE_INSERT_UNIQUE_KEY, 
+				new_bptree_exec_id);
+		if (t < 0) DBUG_RETURN(NULL);
+		tsession->tbpt_ids[table->s->primary_key] = pk_tbpt_id = t;
+		
+		tapioca_bptree_set_num_fields(thrloc->th, t, 1);
+		printf("Setting bpt %d index part %d to memcmp\n", t, 1);
+		tapioca_bptree_set_field_info(thrloc->th, t, 0, sizeof(uuid_t),
+				BPTREE_FIELD_COMP_MEMCMP);
+		
+	}
+	
 	strcpy(tsession->full_table_name, full_table_name);
 
 	if (my_hash_insert(&(thrloc->tsessions), (uchar*) tsession))
@@ -1666,7 +1740,8 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 void * ha_tapioca::initialize_thread_local_space()
 {
 	DBUG_ENTER("ha_tapioca::initialize_thread_local_space");
-	tapioca_thrloc *_thrloc = (tapioca_thrloc *) malloc(sizeof(tapioca_thrloc));
+	tapioca_thrloc *_thrloc = (tapioca_thrloc *)
+		my_malloc(sizeof(tapioca_thrloc), MYF(MY_ZEROFILL));
 	thrloc = _thrloc;
 	thrloc->accesses = 1;
 //	tapioca_handle *th = init_tapioca_connection(&thrloc->node_id);
@@ -1739,7 +1814,7 @@ int ha_tapioca::create_or_set_tsession(THD *thd)
 	}
 	else {
 		// Cache the bpt_id of the primary key since the session already exists
-		pk_tbpt_id = tsession->tbpt_ids[0];
+		pk_tbpt_id = tsession->tbpt_ids[table->s->primary_key];
 	}
 	assert (pk_tbpt_id >= 0 && pk_tbpt_id < 10000);
 	DBUG_RETURN(1);
@@ -2150,6 +2225,15 @@ int ha_tapioca::create(const char *name, TABLE *table_arg,
 
 			ki++;
 		}
+		if(table_arg->s->primary_key == MAX_KEY) 
+		{
+			printf(" implicit pk idx %d name %s key flags %ld \n", MAX_KEY, 
+				   MOSQL_IMPLICIT_PK_NAME, 0);
+			rv = create_new_bpt_id(name, MOSQL_IMPLICIT_PK_NAME, 
+								   table_arg, MAX_KEY);
+			if (rv == -1) goto create_exception;
+			
+		}
 		fflush(stdout);
 		fn_pos = 3;
 		rv = tapioca_commit(th_global);
@@ -2181,7 +2265,7 @@ int ha_tapioca::create_new_bpt_id(const char *table_name,
 	tapioca_bptree_id prev_bpt_id = -1, tbps_ignored;
 
 	struct tapioca_bptree_info *bpt_info = (struct tapioca_bptree_info *) my_malloc(
-			sizeof(struct tapioca_bptree_info), MYF(0));
+			sizeof(struct tapioca_bptree_info), MYF(MY_ZEROFILL | MY_WME));
 
 	bpt_info->bpt_id = -1;
 	bpt_info->is_pk = (idx == table_arg->s->primary_key);
@@ -2202,12 +2286,20 @@ int ha_tapioca::create_new_bpt_id(const char *table_name,
 	strncpy(bpt_info->full_index_name, full_index_name, 128);
 
 	mk = 1;
-    KEY *key_info = &table_arg->key_info[idx];
     bptree_insert_flags insert_flags = BPTREE_INSERT_ALLOW_DUPES;
-    if (key_info->flags & HA_NOSAME)
-    {
-            insert_flags = BPTREE_INSERT_UNIQUE_KEY;
-    }
+	if (idx < MAX_KEY)
+	{
+		KEY *key_info = &table_arg->key_info[idx];
+		if (key_info->flags & HA_NOSAME)
+		{
+				insert_flags = BPTREE_INSERT_UNIQUE_KEY;
+		}
+	}
+	else
+	{
+		// This is an implicit PK
+		insert_flags = BPTREE_INSERT_UNIQUE_KEY;
+	}
 
 
 	// Make sure the metadata is created on tapioca for this table
@@ -2301,8 +2393,8 @@ unmarshall_bptree_info(const char *buf, size_t sz, uint16_t *num_bptrees)
     ret = msgpack_unpack(buf, sz, &offset, &z, &obj);
     *num_bptrees =  (int16_t) obj.via.i64;
 	
-	struct tapioca_bptree_info *n = (struct tapioca_bptree_info *) malloc(
-			sizeof(tapioca_bptree_info) * *num_bptrees);
+	struct tapioca_bptree_info *n = (struct tapioca_bptree_info *) my_malloc(
+		sizeof(tapioca_bptree_info) * *num_bptrees, MYF(MY_WME | MY_ZEROFILL));
 	struct tapioca_bptree_info *nptr = n;
 	
 	for (i = 0; i < *num_bptrees; i++)

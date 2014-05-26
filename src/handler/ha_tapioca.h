@@ -34,6 +34,7 @@ extern "C"
 {
 #include "tapioca_util.h"
 #include <msgpack.h>
+#include <uuid/uuid.h>
 }
 
 
@@ -57,6 +58,7 @@ extern "C"
 #define TAPIOCA_MAX_NODES_PER_MYSQL 20
 // Number of thread-local slots of memory we create for storage engine ops
 #define MOSQL_NUM_MEM_SLOTS 10 
+#define MOSQL_IMPLICIT_PK_NAME "IMPLICIT_PK"
 //#if MYSQL_VERSION_ID>=50500
 //#include "sql_priv.h"
 //#include "my_global.h"
@@ -116,6 +118,7 @@ typedef struct st_tapioca_table_session
 {
 	char full_table_name[TAPIOCA_MAX_TABLE_NAME_LEN];
 	tapioca_bptree_id *tbpt_ids; // should be a bps for each key in the table
+	//tapioca_bptree_id tbpt_ids[MAX_KEY]; // should be a bps for each key in the table
 } tapioca_table_session;
 
 
@@ -193,6 +196,7 @@ private:
 	
 	inline int is_field_null(Field *field, const uchar *buf);
 	inline int is_autoinc_needed(Field *field, const uchar *buf);
+	inline bool table_has_pk() ;
 public:
     ha_tapioca(handlerton *hton, TABLE_SHARE *table_arg);
     ~ha_tapioca()
@@ -217,7 +221,7 @@ public:
 //		  HA_CAN_INDEX_BLOBS |
 		  HA_FAST_KEY_READ |  // stable
 //		  HA_CAN_SQL_HANDLER |
-		  HA_REQUIRE_PRIMARY_KEY |  // stable
+//		  HA_REQUIRE_PRIMARY_KEY |  // stable
 		  HA_PRIMARY_KEY_REQUIRED_FOR_POSITION 
 		  | HA_REQUIRES_KEY_COLUMNS_FOR_DELETE
 		  //| HA_REC_NOT_IN_SEQ
