@@ -107,8 +107,6 @@ typedef struct st_tapioca_thrloc
 	int open_tables;
 	int th_enabled;
 	HASH tsessions;
-	uchar *ring_buf; 
-	int ring_buf_pos;
 	int should_not_be_written;
 	int tapioca_client_id;
 
@@ -163,8 +161,8 @@ private:
 	int get_tapioca_table_id(tapioca_handle *th);
     int unpack_row_into_buffer(uchar *buf, uchar *v);
     uchar *write_tapioca_buffer_header(uchar *buf);
-    int read_index_key(uchar *buf, uchar *k, int ksize);
-    inline int get_pk_length(bool incl_string);
+    int read_index_key(uchar *buf, uchar *k);
+    inline int get_pk_length();
     inline int get_key_level(const uchar *key, int len);
     int create_new_bpt_id(const char *table_name, const char *index_name,
     	TABLE *table_arg, int idx);
@@ -194,6 +192,7 @@ private:
 	inline bool is_index_buffer_exact_match(uint index, key_part_map keypart_map);
 	
 	inline int is_field_null(Field *field, const uchar *buf);
+	inline int is_autoinc_needed(Field *field, const uchar *buf);
 public:
     ha_tapioca(handlerton *hton, TABLE_SHARE *table_arg);
     ~ha_tapioca()
@@ -219,20 +218,27 @@ public:
 		  HA_FAST_KEY_READ |  // stable
 //		  HA_CAN_SQL_HANDLER |
 		  HA_REQUIRE_PRIMARY_KEY |  // stable
-		  HA_PRIMARY_KEY_REQUIRED_FOR_POSITION |
-//		  HA_PRIMARY_KEY_REQUIRED_FOR_DELETE |
-//		  HA_PRIMARY_KEY_IN_READ_INDEX |
+		  HA_PRIMARY_KEY_REQUIRED_FOR_POSITION 
+		  | HA_REQUIRES_KEY_COLUMNS_FOR_DELETE
+		  //| HA_REC_NOT_IN_SEQ
+		  | HA_PRIMARY_KEY_REQUIRED_FOR_DELETE 
+		  | HA_PRIMARY_KEY_IN_READ_INDEX 
+		  | HA_ANY_INDEX_MAY_BE_UNIQUE 
+		  | HA_NO_PREFIX_CHAR_KEYS
 //		  HA_NO_AUTO_INCREMENT   // stable
 //		  HA_BINLOG_ROW_CAPABLE
 //		  HA_CAN_GEOMETRY |
 //		  HA_PARTIAL_COLUMN_READ
-		  HA_TABLE_SCAN_ON_INDEX  // for ORDER BY?
+		  | HA_TABLE_SCAN_ON_INDEX  // for ORDER BY?
 		  );
     }
 
     ulong index_flags(uint idx, uint part, bool all_parts) const
     {
-        return (HA_READ_NEXT | HA_READ_ORDER | HA_READ_RANGE);
+        return (HA_READ_NEXT 
+			| HA_READ_ORDER 
+			| HA_READ_RANGE
+			| HA_KEYREAD_ONLY);
     }
 
     uint max_supported_record_length() const
@@ -252,7 +258,7 @@ public:
 
     uint max_supported_key_length() const
     {
-        return 512;
+        return 1024;
     }
 
     virtual bool primary_key_is_clustered()
