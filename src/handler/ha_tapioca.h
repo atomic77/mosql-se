@@ -159,16 +159,16 @@ class ha_tapioca: public handler
 
 
 private:
-	int init_tapioca_writer();
-	tapioca_handle *init_tapioca_connection(int *node_id);
-	int get_tapioca_table_id(tapioca_handle *th);
+    int init_tapioca_writer();
+    tapioca_handle *init_tapioca_connection(int *node_id);
+    int get_tapioca_table_id(tapioca_handle *th);
     int unpack_row_into_buffer(uchar *buf, uchar *v);
     uchar *write_tapioca_buffer_header(uchar *buf);
-    int read_index_key(uchar *buf, uchar *k);
+    int get_row_by_key(uchar *buf, uchar *k);
     inline int get_pk_length();
     inline int get_key_level(const uchar *key, int len);
     int create_new_bpt_id(const char *table_name, const char *index_name,
-    	TABLE *table_arg, int idx);
+                          TABLE *table_arg, int idx);
     int index_fetch(uchar *buf, bool first);
     int index_fetch_buffered(uchar *buf, bool first);
     tapioca_table_session *initialize_new_bptree_thread_data();
@@ -177,26 +177,28 @@ private:
     int create_or_set_thrloc(THD *thd);
     int create_or_set_tsession(THD *thd);
     int prefetch_tapioca_rows(tapioca_bptree_id tbpt_id, bool first,
-    	tapioca_thrloc *thrloc, tapioca_table_session *tsession, bool *has_rows);
+                              tapioca_thrloc *thrloc, 
+			      tapioca_table_session *tsession, bool *has_rows);
     tapioca_handle * get_current_tapioca_handle();
     uchar * construct_tapioca_row_buffer(const uchar *buf, size_t * buf_sz);
-	uchar * construct_tapioca_key_buffer(const uchar *key, uint key_len, uint idx, 
-										 size_t *buf_sz, bool incl_header);
-    uchar * construct_idx_buffer_from_row(const uchar *buf, size_t *buf_sz, int idx, 
-											bool incl_header);
-	int update_indexes(const uchar *old_data, const uchar *new_data);
-	int insert_to_index(const uchar *buf, int idx, uchar *row, size_t row_sz);
-	int delete_from_index(const uchar *buf, int idx);
-	
-	inline uchar * get_next_mem_slot();
-	
-	tapioca_bptree_id get_tbpt_id_for_idx(int idx);
-	
-	inline bool is_index_buffer_exact_match(uint index, key_part_map keypart_map);
-	
-	inline int is_field_null(Field *field, const uchar *buf);
-	inline int is_autoinc_needed(Field *field, const uchar *buf);
-	inline bool table_has_pk() ;
+    uchar * construct_tapioca_key_buffer(const uchar *key, uint key_len, uint idx,
+                                         size_t *buf_sz, bool incl_header);
+    uchar * construct_idx_buffer_from_row(const uchar *buf, size_t *buf_sz, int idx,
+                                          bool incl_header);
+    int update_indexes(const uchar *old_data, const uchar *new_data);
+    int insert_to_index(const uchar *buf, int idx, uchar *row, size_t row_sz);
+    int delete_from_index(const uchar *buf, int idx);
+
+    inline uchar * get_next_mem_slot();
+
+    tapioca_bptree_id get_tbpt_id_for_idx(int idx);
+
+    inline bool is_index_buffer_exact_match(uint index, key_part_map keypart_map);
+
+    inline int is_field_null(Field *field, const uchar *buf);
+    inline int is_autoinc_needed(Field *field, const uchar *buf);
+    inline bool table_has_pk() ;
+    void handle_varchar(KEY_PART_INFO *key_part, uchar **k, const uchar *buf);
 public:
     ha_tapioca(handlerton *hton, TABLE_SHARE *table_arg);
     ~ha_tapioca()
@@ -219,12 +221,11 @@ public:
         return(
 		  HA_NULL_IN_KEY |
 //		  HA_CAN_INDEX_BLOBS |
-		  HA_FAST_KEY_READ |  // stable
+		  //HA_FAST_KEY_READ | // this causes a weird problem in sorting
 //		  HA_CAN_SQL_HANDLER |
-//		  HA_REQUIRE_PRIMARY_KEY |  // stable
 		  HA_PRIMARY_KEY_REQUIRED_FOR_POSITION 
 		  | HA_REQUIRES_KEY_COLUMNS_FOR_DELETE
-		  //| HA_REC_NOT_IN_SEQ
+		  | HA_REC_NOT_IN_SEQ
 		  | HA_PRIMARY_KEY_REQUIRED_FOR_DELETE 
 		  | HA_PRIMARY_KEY_IN_READ_INDEX 
 		  | HA_ANY_INDEX_MAY_BE_UNIQUE 
