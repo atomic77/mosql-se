@@ -1,0 +1,13 @@
+DROP SCHEMA test1;
+CREATE SCHEMA test1;
+USE test1;
+
+CREATE TABLE t (
+i int AUTO_INCREMENT, 
+j int, 
+v text, primary key(i)) engine = mosql;
+
+INSERT INTO t (j, v) VALUES (201,'AAAAAAAAAA');
+INSERT INTO t (j, v) VALUES (204,'AAAAAAAAAA');
+INSERT INTO t (j, v) VALUES (206,'AAAAAAAAAA');
+INSERT INTO t (j, v) VALUES (209,'AAAAAAAAAA');
