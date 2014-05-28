@@ -956,7 +956,11 @@ int ha_tapioca::write_row(uchar *buf)
 	// This row will be relatively long lived, make a copy from slot
 	rv = write_all_indexes(buf, row, row_sz);
 
-	if(rv > 0) DBUG_RETURN(rv);
+	if(rv > 0) 
+	{
+		my_free(row, MYF(MY_WME));
+		DBUG_RETURN(rv);
+	}
 	if (rv < 0) goto write_exception;
 
 	fn_pos = 2;
@@ -964,14 +968,14 @@ int ha_tapioca::write_row(uchar *buf)
 	// If we don't write the row into the btree, put it into a separate k/v
 	if (!is_row_in_node)
 	{
-		uchar *pk = construct_idx_buffer_from_row(buf, &pk_sz, 
-												  table->s->primary_key, true);
+		uchar *pk = construct_idx_buffer_from_row(buf, &pk_sz,
+						 table->s->primary_key, true);
 		if (tapioca_put(thrloc->th, pk, pk_sz, row, row_sz) == -1) 
 			goto write_exception;
 		my_free(pk, MYF(MY_WME));
 	}
 
-	//my_free(row, MYF(MY_WME));
+	my_free(row, MYF(MY_WME));
 	fn_pos = 3;
 	write_rows++;
 
@@ -1260,9 +1264,10 @@ int ha_tapioca::index_read(uchar * buf, const uchar * key, uint key_len,
 	
 	if(use_primary && key_len == get_pk_length())
 	{
-		if (rv == BPTREE_OP_KEY_NOT_FOUND) DBUG_RETURN(HA_ERR_KEY_NOT_FOUND);
-		
-		if (is_row_in_node)
+		if (rv == BPTREE_OP_KEY_NOT_FOUND) {
+			rv = convert_to_mysql_error(rv);
+		}
+		else if (is_row_in_node)
 		{
 			rv = unpack_row_into_buffer(buf, v);
 		}
@@ -1270,6 +1275,9 @@ int ha_tapioca::index_read(uchar * buf, const uchar * key, uint key_len,
 		{
 			rv = get_row_by_key(buf, k);
 		}
+		my_free(k, MYF(MY_WME));	
+		my_free(v, MYF(MY_WME));	
+		
 		DBUG_RETURN(rv);
 	}
 	
@@ -2209,6 +2217,8 @@ int ha_tapioca::create(const char *name, TABLE *table_arg,
 				table_arg->s->primary_key);
 		fflush(stdout);
 		KEY *ki = table_arg->key_info;
+		// In some corrupt mysql builds we get large number of keys
+		if (table_arg->s->keys > max_supported_keys()) DBUG_RETURN(-1);
 		for (int i = 0; i < table_arg->s->keys; i++)
 		{
 			fn_pos = 3;
