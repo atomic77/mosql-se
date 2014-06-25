@@ -163,7 +163,6 @@ private:
     int init_tapioca_writer();
     tapioca_handle *init_tapioca_connection(int *node_id);
     int get_tapioca_table_id(tapioca_handle *th);
-    int unpack_row_into_buffer_packed(uchar *buf, uchar *v);
     int unpack_row_into_buffer(uchar *buf, uchar *v);
     uchar *write_tapioca_buffer_header(uchar *buf);
     int get_row_by_key(uchar *buf, uchar *k);
@@ -182,7 +181,6 @@ private:
                               tapioca_thrloc *thrloc, 
 			      tapioca_table_session *tsession, bool *has_rows);
     tapioca_handle * get_current_tapioca_handle();
-    uchar * construct_tapioca_row_buffer_packed(const uchar *buf, size_t * buf_sz);
     uchar * construct_tapioca_row_buffer(const uchar *buf, size_t * buf_sz);
     uchar * construct_tapioca_key_buffer(const uchar *key, uint key_len, uint idx,
                                          size_t *buf_sz, bool incl_header);

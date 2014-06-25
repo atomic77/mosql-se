@@ -37,7 +37,7 @@
 #else
 
 #define get_key_parts(X) X->key_parts
-#define my_free_common(X) my_free(X, MYF(WME))
+#define my_free_common(X) my_free(X, MYF(MY_WME))
 
 #endif
 
@@ -754,6 +754,7 @@ uchar * ha_tapioca::construct_idx_buffer_from_row(const uchar *buf, size_t *buf_
  * -------------------------------------------
  * Row Length is packed with the length of the packed buffer to follow
  */
+/*
 uchar * ha_tapioca::construct_tapioca_row_buffer_packed(const uchar *buf, size_t * buf_sz)
 {
 	uchar *v= get_next_mem_slot();
@@ -790,6 +791,7 @@ uchar * ha_tapioca::construct_tapioca_row_buffer_packed(const uchar *buf, size_t
 	memcpy(v, &sz, sizeof(int32_t));
 	return v;
 }
+*/
 
 int ha_tapioca::get_max_row_len() {
 	int len = 0;
@@ -908,7 +910,7 @@ int ha_tapioca::insert_to_index(const uchar *buf, int idx, uchar *row, size_t ro
 								   pk, pk_sz);
 		my_free_common(sk);	
 	}
-	my_free_common(pk);	
+	if(table_has_pk()) my_free_common(pk);	
 	return(rv);
 }
 
@@ -1225,6 +1227,7 @@ int ha_tapioca::unpack_row_into_buffer(uchar *buf, uchar *v)
  @param buf - the mysql buffer that we populate the row into
  @param v - the packed buffer we got from tapioca
  */
+/*
 int ha_tapioca::unpack_row_into_buffer_packed(uchar *buf, uchar *v)
 {
 	DBUG_ENTER("ha_tapioca::unpack_row_into_buffer");
@@ -1269,7 +1272,7 @@ int ha_tapioca::unpack_row_into_buffer_packed(uchar *buf, uchar *v)
 	dbug_tmp_restore_column_map(table->read_set, org_bitmap);
 	DBUG_RETURN(0);
 }
-
+*/
 int count_bits_set(uint v) 
 {
 	//uint v; // count the number of bits set in v
@@ -1632,7 +1635,6 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 	tapioca_table_session *tsession = (tapioca_table_session *) my_malloc(
 			sizeof(tapioca_table_session), MYF(MY_WME | MY_ZEROFILL));
 
-	// Quick and dirty way to support "index" 64
 	tsession->tbpt_ids = (tapioca_bptree_id *) my_malloc(
 			sizeof(tapioca_bptree_id) * (MAX_KEY+1), MYF(MY_WME | MY_ZEROFILL));
 	assert (tsession != NULL);

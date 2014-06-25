@@ -109,8 +109,7 @@ fi
 
 set -e
 
-#BASEPARAMS="--defaults-file=$BASEDIR/$MYSQLCNF  --skip-syslog --basedir=$BASEDIR --datadir=$BASEDIR/data --log-error=$BASEDIR/debug.err --lower_case_table_names=1 " #  2> /dev/null &" 
-BASEPARAMS="--defaults-file=$BASEDIR/$MYSQLCNF  --basedir=$BASEDIR --datadir=$DATADIR --log-error=$BASEDIR/debug.err --lower_case_table_names=1 " #  2> /dev/null &" 
+BASEPARAMS="--defaults-file=$BASEDIR/$MYSQLCNF  --basedir=$BASEDIR --datadir=$DATADIR --log-error=$DATADIR/debug.err --lower_case_table_names=1 " #  2> /dev/null &" 
 
 cd $BASEDIR
 nohup bin/mysqld_safe $BASEPARAMS $EXTRAPARAMS 2> /dev/null &
