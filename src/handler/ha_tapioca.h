@@ -43,7 +43,8 @@ extern "C"
 
 #if MYSQL_VERSION_ID>=50515
 #include "sql_class.h"
-#include "sql_array.h"
+#include "sql_priv.h"
+// #include "sql_array.h"
 #elif MYSQL_VERSION_ID>50100
 #include "mysql_priv.h"
 #include <mysql/plugin.h>
@@ -199,6 +200,7 @@ private:
     inline int is_autoinc_needed(Field *field, const uchar *buf);
     inline bool table_has_pk() ;
     void handle_varchar(KEY_PART_INFO *key_part, uchar **k, const uchar *buf);
+	int get_max_row_len();
 public:
     ha_tapioca(handlerton *hton, TABLE_SHARE *table_arg);
     ~ha_tapioca()

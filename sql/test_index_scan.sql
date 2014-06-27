@@ -1,6 +1,6 @@
 
-DROP SCHEMA test1;
-CREATE SCHEMA test1;
+DROP SCHEMA IF EXISTS test1;
+CREATE SCHEMA IF NOT EXISTS test1;
 USE test1;
 
 create table t (a int, b int, c int, v text, primary key (a,b,c)) ENGINE=MoSQL;
