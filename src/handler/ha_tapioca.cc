@@ -2073,20 +2073,28 @@ int ha_tapioca::rename_table(const char * from, const char * to)
  TODO We need to do a better job of estimating this, because it is likely
  the cause for TPC-C queries that do not use more than the second level of an
  index
- FIXME If we have a statement like UPDATE .. WHERE k > 10; max_key will be
- NULL and this method will segfault!
 */
 ha_rows ha_tapioca::records_in_range(uint inx, key_range *min_key,
 		key_range *max_key)
 {
 	DBUG_ENTER("ha_tapioca::records_in_range");
 
-	int key_lvl = get_key_level(min_key->key,min_key->length);
-	//int key_parts = table->key_info[inx].key_parts;
+	if (min_key == NULL && max_key == NULL) DBUG_RETURN(records());
+	
+	key_range *key = (min_key == NULL) ? max_key : min_key;
+	int key_lvl = get_key_level(key->key,key->length);
 	KEY* key_info = &table->key_info[inx];
 	int key_parts = get_key_parts(key_info);
-	int same = memcmp(min_key->key, max_key->key,
+	int same = 0; 
+	if (min_key == NULL || max_key == NULL) 
+	{
+		same = 1;
+	}
+	else 
+	{
+		same = memcmp(min_key->key, max_key->key,
 			(int)fmin(min_key->length, max_key->length));
+	}
 	if(same == 0) key_lvl --;
 
 	/* A crude function to estimate exponentially fewer rows as the number of
