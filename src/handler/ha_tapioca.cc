@@ -2242,8 +2242,19 @@ int ha_tapioca::create(const char *name, TABLE *table_arg,
 		uint16_t num_bptrees_read;
 		DBUG_RETURN(reload_tapioca_bptree_metadata(&num_bptrees_read));
 	}
-	pthread_mutex_lock(&tapioca_mutex);
+	
+	if (thd_sql_command(table_arg->in_use) == SQLCOM_TRUNCATE) 
+	{
+		/* This is a truncate; 'drop' and then recreate the table
+		* This delete/drop should be protected by the below mutex,
+		* but would require some reorg because delete_table() also
+		* uses tapioca_mutex to protect engine operations
+		* The likelihood of a problem seems quite low however */
+		if (rv = delete_table(name)) DBUG_RETURN (rv);
+	}
 
+	pthread_mutex_lock(&tapioca_mutex);
+	
 	if (!th_global_enabled) init_administrative_connection();
 
 	/* In order to support multiple MySQL nodes, here we need to check if
