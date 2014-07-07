@@ -1561,6 +1561,10 @@ void ha_tapioca::position(const uchar *record)
 {
 	DBUG_ENTER("ha_tapioca::position");
 	size_t pk_len;
+	if (!table_has_pk()) {
+		ref_length = 0;
+		DBUG_VOID_RETURN;
+	}
 	ref_length = get_pk_length(); 
 	uchar *pk_ptr = construct_idx_buffer_from_row((uchar *) record, &pk_len, 
 						   table->s->primary_key, false);
