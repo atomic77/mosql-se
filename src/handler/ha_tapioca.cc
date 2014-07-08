@@ -1336,6 +1336,17 @@ int ha_tapioca::index_read(uchar * buf, const uchar * key, uint key_len,
 		{
 			rv = get_row_by_key(buf, k);
 		}
+		
+		if (find_flag == HA_READ_KEY_OR_NEXT) 
+		{
+			// This could be a stmt like SELECT .. WHERE pk >= val
+			// and since we returned the value above, make sure
+			// we advance the cursor one forward
+			tapioca_bptree_index_next(th, tbpt_id, kptr,&ksize,
+				v,&vsize);
+			
+			
+		}
 		my_free_common(k);	
 		my_free_common(v);	
 		
