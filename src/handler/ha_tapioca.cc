@@ -1085,6 +1085,7 @@ int convert_to_mysql_error(int bptree_rv)
 			return HA_ERR_END_OF_FILE;
 		case BPTREE_ERR_DUPLICATE_KEY_INSERTED:
 			return HA_ERR_FOUND_DUPP_KEY;
+		case BPTREE_OP_KEY_FOUND:
 		case BPTREE_OP_SUCCESS:
 			return 0;
 		default:
