@@ -1597,7 +1597,9 @@ int ha_tapioca::rnd_pos(uchar *buf, uchar *pos)
 	DBUG_ENTER("ha_tapioca::rnd_pos");
 	int rv;
 	tapioca_bptree_id tbpt_id;
-	
+	if(active_index == MAX_KEY && !table_has_pk()) {
+		DBUG_RETURN(HA_ERR_WRONG_COMMAND);
+	}
 	rv = index_read(buf, pos, ref_length, HA_READ_KEY_EXACT);
 
 	DBUG_RETURN(rv);
@@ -1743,7 +1745,6 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 			case HA_KEYTYPE_VARBINARY2:
 			case HA_KEYTYPE_VARTEXT1:
 			case HA_KEYTYPE_VARTEXT2:
-				// TODO Find out proper way to do collation; use memcmp for now
 				printf("Setting bpt %d index part %d to varchar memcmp\n",
 						*tbptr, j);
 				tapioca_bptree_set_field_info(thrloc->th, *tbptr, j,
@@ -1751,7 +1752,6 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 						BPTREE_FIELD_COMP_MYSQL_VAR_STRNCMP);
 				break;
 			case HA_KEYTYPE_TEXT:
-				// TODO Find out proper way to do collation; use memcmp for now
 				printf("Setting bpt %d index part %d to char memcmp\n",
 						*tbptr, j);
 				tapioca_bptree_set_field_info(thrloc->th, *tbptr, j,
