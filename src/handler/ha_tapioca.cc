@@ -1710,40 +1710,39 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 		KEY_PART_INFO *key_part = key_info->key_part;
 		for (int j = 0; j < get_key_parts(key_info); j++)
 		{
-			switch (key_part->field->type())
+			//switch (key_part->field->type())
+			switch (key_part->type)
 			{
-			case MYSQL_TYPE_TINY:
+			case HA_KEYTYPE_INT8:
 				printf("Setting bpt %d index part %d to int8 \n",
 						*tbptr, j);
 				tapioca_bptree_set_field_info(thrloc->th, *tbptr, j, key_part->field->max_data_length(),
 						BPTREE_FIELD_COMP_INT_8);
 				break;
-			case MYSQL_TYPE_SHORT:
+			case HA_KEYTYPE_SHORT_INT:
 				printf("Setting bpt %d index part %d to int16\n",
 						*tbptr, j);
 				tapioca_bptree_set_field_info(thrloc->th, *tbptr, j, key_part->field->max_data_length(),
 						BPTREE_FIELD_COMP_INT_16);
 				break;
-			case MYSQL_TYPE_INT24: // ie. MEDIUMINT
-				printf(
-					"INT24 not supported! Setting bpt %d idx pt %d: int16cmp\n",
-						*tbptr, j);
-				tapioca_bptree_set_field_info(thrloc->th, *tbptr, j, key_part->field->max_data_length(),
-						BPTREE_FIELD_COMP_INT_16);
-				break;
-			case MYSQL_TYPE_LONG:
+			case HA_KEYTYPE_LONG_INT:
+			case HA_KEYTYPE_ULONG_INT:
 				printf("Setting bpt %d index part %d to int32\n",
 						*tbptr, j);
 				tapioca_bptree_set_field_info(thrloc->th, *tbptr, j, key_part->field->max_data_length(),
 						BPTREE_FIELD_COMP_INT_32);
 				break;
-			case MYSQL_TYPE_LONGLONG:
+			case HA_KEYTYPE_LONGLONG:
+			case HA_KEYTYPE_ULONGLONG:
 				printf("Setting bpt %d index part %d to int64\n",
 						*tbptr, j);
 				tapioca_bptree_set_field_info(thrloc->th, *tbptr, j, key_part->field->max_data_length(),
 						BPTREE_FIELD_COMP_INT_64);
 				break;
-			case MYSQL_TYPE_VARCHAR:
+			case HA_KEYTYPE_VARBINARY1:
+			case HA_KEYTYPE_VARBINARY2:
+			case HA_KEYTYPE_VARTEXT1:
+			case HA_KEYTYPE_VARTEXT2:
 				// TODO Find out proper way to do collation; use memcmp for now
 				printf("Setting bpt %d index part %d to varchar memcmp\n",
 						*tbptr, j);
@@ -1751,7 +1750,7 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 						key_part->store_length,
 						BPTREE_FIELD_COMP_MYSQL_VAR_STRNCMP);
 				break;
-			case MYSQL_TYPE_STRING:
+			case HA_KEYTYPE_TEXT:
 				// TODO Find out proper way to do collation; use memcmp for now
 				printf("Setting bpt %d index part %d to char memcmp\n",
 						*tbptr, j);
@@ -1759,6 +1758,7 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 						key_part->field->max_data_length(),
 						BPTREE_FIELD_COMP_MYSQL_STRNCMP);
 				break;
+			case HA_KEYTYPE_INT24: // ie. MEDIUMINT
 			default:
 				printf("Setting bpt %d index part %d to default memcmp\n",
 						*tbptr, j);
