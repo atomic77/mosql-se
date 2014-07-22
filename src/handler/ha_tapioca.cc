@@ -1326,7 +1326,15 @@ int ha_tapioca::index_read(uchar * buf, const uchar * key, uint key_len,
 	
 	if(use_primary && key_len == get_pk_length())
 	{
-		if (rv == BPTREE_OP_KEY_NOT_FOUND) {
+		if (find_flag == HA_READ_KEY_OR_NEXT) 
+		{
+			// This could be a stmt like SELECT .. WHERE pk >= val
+			// and since we returned the value above, make sure
+			// we advance the cursor one forward
+			rv = tapioca_bptree_index_next(th, tbpt_id, kptr,&ksize,
+				v,&vsize);
+		}
+		if (rv == BPTREE_OP_KEY_NOT_FOUND || rv == BPTREE_OP_EOF) {
 			rv = convert_to_mysql_error(rv);
 		}
 		else if (is_row_in_node)
@@ -1338,16 +1346,6 @@ int ha_tapioca::index_read(uchar * buf, const uchar * key, uint key_len,
 			rv = get_row_by_key(buf, k);
 		}
 		
-		if (find_flag == HA_READ_KEY_OR_NEXT) 
-		{
-			// This could be a stmt like SELECT .. WHERE pk >= val
-			// and since we returned the value above, make sure
-			// we advance the cursor one forward
-			tapioca_bptree_index_next(th, tbpt_id, kptr,&ksize,
-				v,&vsize);
-			
-			
-		}
 		my_free_common(k);	
 		my_free_common(v);	
 		
