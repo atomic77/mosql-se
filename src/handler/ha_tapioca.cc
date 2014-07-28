@@ -628,13 +628,13 @@ uchar *ha_tapioca::construct_tapioca_key_buffer(const uchar *key, uint key_len,
 	DBUG_ENTER("ha_tapioca::construct_tapioca_key_buffer");
 	uchar *k, *kptr, *kptr_new;
 	kptr = k = get_next_mem_slot();
+	uint16 len;
 	if (incl_header)
 	{
 		kptr = write_tapioca_buffer_header(k);
 	}
 	KEY *key_info = &table->key_info[idx];
 	KEY_PART_INFO *key_part = key_info->key_part;
-	//KEY_PART_INFO *key_end = key_part + get_key_parts(key_info);
 	KEY_PART_INFO *key_end = key_part + get_key_parts(key_info);
 
 	uint key_buf_offset = 0;
@@ -646,30 +646,31 @@ uchar *ha_tapioca::construct_tapioca_key_buffer(const uchar *key, uint key_len,
 			// Field is nullable -- skip the null byte in the key buf
 			key_buf_offset += 1;
 		}
-		if (field->type() == MYSQL_TYPE_VARCHAR)
+		switch (key_part->type) 
 		{
+		case HA_KEYTYPE_VARBINARY1:
+		case HA_KEYTYPE_VARBINARY2:
+		case HA_KEYTYPE_VARTEXT1:
+		case HA_KEYTYPE_VARTEXT2:
 			// Take the varchar / char format as-is
 			memcpy(kptr, key+key_buf_offset, key_part->store_length);
 			// Overwrite actual length with max length until we properly
 			// support variable-length varchar index fields
-			uint16 len = key_part->length;
+			len = key_part->length;
 			memcpy(kptr, &len, 2); // oh man
 			kptr += key_part->store_length;
 			key_buf_offset += key_part->store_length;
-			//handle_varchar(key_part, &kptr, key+key_buf_offset);
-		} 
-		else if (field->type() == MYSQL_TYPE_STRING)
-		{
-			// Take the varchar / char format as-is
-			memcpy(kptr, key+key_buf_offset, key_part->field->max_data_length());
-			kptr += key_part->field->max_data_length();
-			key_buf_offset += key_part->field->max_data_length();
-		}
-		else
-		{
+			break; 
+		case HA_KEYTYPE_TEXT:
+			memcpy(kptr, key+key_buf_offset, key_part->store_length);
+			kptr += key_part->store_length;
+			key_buf_offset += key_part->store_length;
+			break;
+		default:
 			kptr_new = field->pack(kptr, key + key_buf_offset);
 			key_buf_offset += (kptr_new - kptr);
 			kptr = kptr_new;
+			break;
 		}
 		if (key_buf_offset >= key_len) break;
 	}
@@ -724,26 +725,39 @@ uchar * ha_tapioca::construct_idx_buffer_from_row(const uchar *buf, size_t *buf_
 		if (table->next_number_field == field &&
 			is_autoinc_needed(field, buf)) {
 			kptr= field->pack(kptr, (const uchar *)&current_auto_inc);
+			continue;
 		}
+		
+		switch (key_part->type) 
+		{
 		// sigh. hack this the way NDB does it
-		else if (field->type() == MYSQL_TYPE_VARCHAR)
-		{
+		case HA_KEYTYPE_VARBINARY1:
+		case HA_KEYTYPE_VARBINARY2:
+		case HA_KEYTYPE_VARTEXT1:
+		case HA_KEYTYPE_VARTEXT2:
 			handle_varchar(key_part, &kptr, (buf + key_part->offset));
-		}
-		else if (field->type() == MYSQL_TYPE_STRING)
-		{
-			field->pack(kptr, buf + key_part->offset);
-			kptr += key_part->field->max_data_length();
-		}
-		else 
-		{
+			break;
+		case HA_KEYTYPE_TEXT:
+			// field->pack(kptr, buf + key_part->offset);
+			memcpy(kptr, buf+key_part->offset, key_part->store_length);
+			kptr += key_part->store_length;
+			break;
+		default:
 			kptr = field->pack(kptr, buf + key_part->offset);
+			break;
 		}
 	}
 	*buf_sz = (int)((kptr - k));
 	assert(*buf_sz < TAPIOCA_MAX_VALUE_SIZE);
 	DBUG_PRINT("ha_tapioca", ("Generated pk buffer size %d", *buf_sz));
 	return(k);
+}
+
+int ha_tapioca::get_max_row_len() {
+	int len = 0;
+	for(Field **field = table->field; *field; field++){
+		len += (*field)->max_data_length();
+	}
 }
 
 /*@ Returns a buffer with the packed contents of mysql row in *buf; 
@@ -754,8 +768,7 @@ uchar * ha_tapioca::construct_idx_buffer_from_row(const uchar *buf, size_t *buf_
  * -------------------------------------------
  * Row Length is packed with the length of the packed buffer to follow
  */
-/*
-uchar * ha_tapioca::construct_tapioca_row_buffer_packed(const uchar *buf, size_t * buf_sz)
+uchar * ha_tapioca::construct_tapioca_row_buffer(const uchar *buf, size_t * buf_sz)
 {
 	uchar *v= get_next_mem_slot();
 	uchar *vptr = v;
@@ -791,15 +804,7 @@ uchar * ha_tapioca::construct_tapioca_row_buffer_packed(const uchar *buf, size_t
 	memcpy(v, &sz, sizeof(int32_t));
 	return v;
 }
-*/
-
-int ha_tapioca::get_max_row_len() {
-	int len = 0;
-	for(Field **field = table->field; *field; field++){
-		len += (*field)->max_data_length();
-	}
-	
-}
+/*
 uchar * ha_tapioca::construct_tapioca_row_buffer(const uchar *buf, size_t * buf_sz)
 {
 	uchar *v= get_next_mem_slot();
@@ -823,6 +828,7 @@ uchar * ha_tapioca::construct_tapioca_row_buffer(const uchar *buf, size_t * buf_
 	return v;
 	
 }
+*/
 
 int ha_tapioca::delete_from_index(const uchar *buf, int idx)
 {
@@ -1201,35 +1207,27 @@ inline int ha_tapioca::get_pk_length()
 	KEY_PART_INFO *key_end = key_part + get_key_parts(pk_info);
 	for (; key_part != key_end; ++key_part)
 	{
-		if (key_part->field->type() == MYSQL_TYPE_VARCHAR) {
+		switch (key_part->type)
+		{
+		case HA_KEYTYPE_VARBINARY1:
+		case HA_KEYTYPE_VARBINARY2:
+		case HA_KEYTYPE_VARTEXT1:
+		case HA_KEYTYPE_VARTEXT2: 
 			size += key_part->store_length;
-		} else {
+			break;
+		default:
 			size += key_part->field->max_data_length();
+			break;
 		}
 	}
 	return size;
-}
-
-// FIXME Properly implement this; a nice optimization would be to avoid all the
-// memory copies and unpack/packing that is happening of row data right now
-int ha_tapioca::unpack_row_into_buffer(uchar *buf, uchar *v)
-{
-	DBUG_ENTER("ha_tapioca::unpack_row_into_buffer_direct");
-	int32_t stored_buf_size;
-	uchar *vptr = v;
-	memcpy(&stored_buf_size, vptr, sizeof(int32_t));
-	vptr += sizeof(int32_t);
-	memcpy(buf, vptr, stored_buf_size); 
-
-	DBUG_RETURN(0);
 }
 
 /**	Unpack mysql row stored in *v into *buf
  @param buf - the mysql buffer that we populate the row into
  @param v - the packed buffer we got from tapioca
  */
-/*
-int ha_tapioca::unpack_row_into_buffer_packed(uchar *buf, uchar *v)
+int ha_tapioca::unpack_row_into_buffer(uchar *buf, uchar *v)
 {
 	DBUG_ENTER("ha_tapioca::unpack_row_into_buffer");
 	int32_t stored_buf_size, buf_size = 0;
@@ -1273,7 +1271,7 @@ int ha_tapioca::unpack_row_into_buffer_packed(uchar *buf, uchar *v)
 	dbug_tmp_restore_column_map(table->read_set, org_bitmap);
 	DBUG_RETURN(0);
 }
-*/
+
 int count_bits_set(uint v) 
 {
 	//uint v; // count the number of bits set in v
@@ -1501,6 +1499,8 @@ int ha_tapioca::index_first(uchar *buf)
 
 }
 
+/* TODO For a statement like SELECT MAX(c) FROM t1; where
+c is indexed, seems like we need to support these two methods */
 int ha_tapioca::index_prev(uchar *buf)
 {
 	DBUG_ENTER("ha_tapioca::index_prev");
@@ -1516,13 +1516,8 @@ int ha_tapioca::rnd_init(bool scan)
 {
 	DBUG_ENTER("ha_tapioca::rnd_init");
 	rows_written = -1;
-	ref_length = get_pk_length(); // + get_tapioca_header_size();
-	//stats.records = 0;
-	
-	// Ensure we are on the PK-index
-	//bps->bpt_id = index_to_bpt_id[0];
+	ref_length = get_pk_length(); 
 	DBUG_RETURN(0);
-	//	DBUG_RETURN(HA_ERR_WRONG_COMMAND);
 }
 
 int ha_tapioca::rnd_end()
@@ -1755,7 +1750,8 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 				printf("Setting bpt %d index part %d to char memcmp\n",
 						*tbptr, j);
 				tapioca_bptree_set_field_info(thrloc->th, *tbptr, j,
-						key_part->field->max_data_length(),
+						// key_part->field->max_data_length(),
+						key_part->store_length,
 						BPTREE_FIELD_COMP_MYSQL_STRNCMP);
 				break;
 			case HA_KEYTYPE_INT24: // ie. MEDIUMINT
