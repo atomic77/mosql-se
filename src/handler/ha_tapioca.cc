@@ -661,6 +661,7 @@ uchar *ha_tapioca::construct_tapioca_key_buffer(const uchar *key, uint key_len,
 			kptr += key_part->store_length;
 			key_buf_offset += key_part->store_length;
 			break; 
+		case HA_KEYTYPE_BINARY:
 		case HA_KEYTYPE_TEXT:
 			memcpy(kptr, key+key_buf_offset, key_part->store_length);
 			kptr += key_part->store_length;
@@ -737,6 +738,7 @@ uchar * ha_tapioca::construct_idx_buffer_from_row(const uchar *buf, size_t *buf_
 		case HA_KEYTYPE_VARTEXT2:
 			handle_varchar(key_part, &kptr, (buf + key_part->offset));
 			break;
+		case HA_KEYTYPE_BINARY:
 		case HA_KEYTYPE_TEXT:
 			// field->pack(kptr, buf + key_part->offset);
 			memcpy(kptr, buf+key_part->offset, key_part->store_length);
