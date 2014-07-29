@@ -777,11 +777,9 @@ uchar * ha_tapioca::construct_tapioca_row_buffer(const uchar *buf, size_t * buf_
 
 	// we'll skip past the spot for size as we need to compute it below
 	vptr += sizeof(int32_t);
-	//vptr_prev = vptr;
 	memcpy(vptr, buf, table->s->null_bytes); // copy any null bytes the row may contain
 	vptr += table->s->null_bytes;
 
-	my_bitmap_map *org_bitmap = dbug_tmp_use_all_columns(table, table->read_set);
 	for(Field **field = table->field; *field; field++){
 		if(!((*field)->is_null())){
 			// FIXME Quick hack to "support" autoinc; 
@@ -792,14 +790,16 @@ uchar * ha_tapioca::construct_tapioca_row_buffer(const uchar *buf, size_t * buf_
 			}
 			else 
 			{
-				vptr = (*field)->pack(vptr, buf + ((*field)->ptr - buf));
+				// field->ptr always points to record[0] and not
+				// necessarily what *buf points to!
+				vptr = (*field)->pack(vptr, buf + ((*field)->ptr - 
+				table->record[0]));
 			}
 		}
 	}
 
 	*buf_sz = (size_t)(vptr - v);
 	assert(*buf_sz < TAPIOCA_MAX_VALUE_SIZE);
-	dbug_tmp_restore_column_map(table->read_set, org_bitmap);
 
 	// prepend packed row size to front of buffer (not incl. header!)
 	int32_t sz = *buf_sz - (sizeof(int32_t));
@@ -1069,7 +1069,7 @@ int ha_tapioca::update_indexes(const uchar *old_data, const uchar *new_data)
 			// One of the columns of this index has been written to
 			
 			rv = delete_from_index(old_data,i);
-			if (rv != BPTREE_OP_SUCCESS) return rv;
+			if (rv != BPTREE_OP_KEY_FOUND) return rv;
 			
 			size_t new_row_sz;
 			uchar *new_row = construct_tapioca_row_buffer(new_data, &new_row_sz);
@@ -1238,9 +1238,6 @@ int ha_tapioca::unpack_row_into_buffer(uchar *buf, uchar *v)
 	memcpy(&stored_buf_size, vptr, sizeof(int32_t));
 	vptr += sizeof(int32_t);
 
-	my_bitmap_map *org_bitmap =
-			dbug_tmp_use_all_columns(table, table->read_set);
-
 	// Copy any null bytes
 	memcpy(bptr, vptr, table->s->null_bytes);
 	vptr += table->s->null_bytes;
@@ -1250,19 +1247,12 @@ int ha_tapioca::unpack_row_into_buffer(uchar *buf, uchar *v)
 	{
 		if (!((*field)->is_null()))
 		{
-		// TODO Verify exactly when this method changed
 		#if MYSQL_VERSION_ID<50500
 			vptrc = (*field)->unpack(bptr + (*field)->offset(table->record[0]),
 					vptrc);
 		#else
-			// FIXME Verify proper way to call this in later versions
 			vptrc = (*field)->unpack(bptr + (*field)->offset(table->record[0]),
 					vptrc,0,0);
-		//	ptr= (*field)->unpack(record + (*field)->offset(table->record[0]),
-                 //                 ptr, end)))
-		
-			//table->s->rec_buff_length
-
 		#endif
 		}
 
@@ -1270,7 +1260,6 @@ int ha_tapioca::unpack_row_into_buffer(uchar *buf, uchar *v)
 		vptrc_prev = vptrc;
 	}
 
-	dbug_tmp_restore_column_map(table->read_set, org_bitmap);
 	DBUG_RETURN(0);
 }
 
