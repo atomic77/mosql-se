@@ -1252,9 +1252,12 @@ int ha_tapioca::unpack_row_into_buffer(uchar *buf, uchar *v)
 					vptrc);
 		#else
 			vptrc = (*field)->unpack(bptr + (*field)->offset(table->record[0]),
-					vptrc,0,0);
+					vptrc,
+					vptrc + (*field)->max_data_length(),0);
+					//vptrc + (*field)->pack_length(),0);
 		#endif
 		}
+		if (vptrc == NULL) DBUG_RETURN(HA_ERR_INTERNAL_ERROR);
 
 		buf_size += (int) (vptrc - vptrc_prev);
 		vptrc_prev = vptrc;
