@@ -1710,6 +1710,7 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 				tapioca_bptree_set_field_info(thrloc->th, *tbptr, j, key_part->field->max_data_length(),
 						BPTREE_FIELD_COMP_INT_8);
 				break;
+			case HA_KEYTYPE_USHORT_INT:
 			case HA_KEYTYPE_SHORT_INT:
 				printf("Setting bpt %d index part %d to int16\n",
 						*tbptr, j);
@@ -1748,6 +1749,7 @@ tapioca_table_session * ha_tapioca::initialize_new_bptree_thread_data()
 						key_part->store_length,
 						BPTREE_FIELD_COMP_MYSQL_STRNCMP);
 				break;
+			case HA_KEYTYPE_UINT24: // ie. MEDIUMINT
 			case HA_KEYTYPE_INT24: // ie. MEDIUMINT
 			default:
 				printf("Setting bpt %d index part %d to default memcmp\n",
@@ -2174,6 +2176,13 @@ int ha_tapioca::check(THD* thd, HA_CHECK_OPT* check_opt)
 					i,key_info->name, get_key_parts(key_info), *tbptr);
 			rv = tapioca_bptree_debug(th, *tbptr,
 					BPTREE_DEBUG_DUMP_GRAPHVIZ);
+		}
+		else if (check_opt->flags & T_EXTEND && check_opt->flags & T_MEDIUM)
+		{
+			printf("Recurs. dump of idx %d name %s, %d parts, bpt_id %d",
+					i,key_info->name, get_key_parts(key_info), *tbptr);
+			rv = tapioca_bptree_debug(th, *tbptr,
+					BPTREE_DEBUG_DUMP_NODE_DETAILS);
 		}
 		else if (check_opt->flags & T_QUICK)
 		{
