@@ -770,6 +770,7 @@ int ha_tapioca::get_max_row_len() {
  */
 uchar * ha_tapioca::construct_tapioca_row_buffer(const uchar *buf, size_t * buf_sz)
 {
+	DBUG_ENTER("ha_tapioca::construct_tapioca_row_buffer");
 	uchar *v= get_next_mem_slot();
 	uchar *vptr = v;
 
@@ -802,7 +803,7 @@ uchar * ha_tapioca::construct_tapioca_row_buffer(const uchar *buf, size_t * buf_
 	// prepend packed row size to front of buffer (not incl. header!)
 	int32_t sz = *buf_sz - (sizeof(int32_t));
 	memcpy(v, &sz, sizeof(int32_t));
-	return v;
+	DBUG_RETURN(v);
 }
 
 /*@
@@ -837,10 +838,10 @@ uchar * ha_tapioca::get_rowid_for_row_sequential(const uchar *buf, int32_t *buf_
 		rv = tapioca_bptree_index_next(thrloc->th, tbpt_id, 
 					kptr, buf_sz, v, &vsize );
 	}
-	free(v);
+	my_free_common(v);
 	if (cmp != 0) 
 	{
-		free(k);
+		my_free_common(k);
 		k = NULL;
 	}
 	
@@ -849,12 +850,13 @@ uchar * ha_tapioca::get_rowid_for_row_sequential(const uchar *buf, int32_t *buf_
 
 int ha_tapioca::delete_from_index(const uchar *buf, int idx)
 {
+	DBUG_ENTER("ha_tapioca::delete_from_index");
 	uchar *key, *val;
 	uchar nb = '\0';
 	size_t k_sz, v_sz;
 	
 	tapioca_bptree_id tbpt_id = get_tbpt_id_for_idx(idx);
-	if (tbpt_id == -1) return -1;
+	if (tbpt_id == -1) DBUG_RETURN(-1);
 	
 	if (idx == table->s->primary_key)
 	{
@@ -880,18 +882,19 @@ int ha_tapioca::delete_from_index(const uchar *buf, int idx)
 	int rv = tapioca_bptree_delete(thrloc->th, tbpt_id, key, k_sz, val, v_sz);
 	my_free_common(key);	
 	my_free_common(val);	
-	return rv;
+	DBUG_RETURN(rv);
 }
 
 int ha_tapioca::insert_to_index(const uchar *buf, int idx, uchar *row, size_t row_sz)
 {		
+	DBUG_ENTER("ha_tapioca::insert_to_index");
 	int rv;
 	size_t pk_sz, sk_sz;
 	uchar *pk;
 	uuid_t u;
 	
 	tapioca_bptree_id tbpt_id = get_tbpt_id_for_idx(idx);
-	if (tbpt_id == -1) return -1;
+	if (tbpt_id == -1) DBUG_RETURN(-1);
 	
 	if(table_has_pk()) 
 	{
@@ -934,7 +937,7 @@ int ha_tapioca::insert_to_index(const uchar *buf, int idx, uchar *row, size_t ro
 		my_free_common(sk);	
 	}
 	if(table_has_pk()) my_free_common(pk);	
-	return(rv);
+	DBUG_RETURN(rv);
 }
 
 inline bool ha_tapioca::table_has_pk() {
@@ -1055,20 +1058,22 @@ int ha_tapioca::write_row(uchar *buf)
 
 tapioca_bptree_id ha_tapioca::get_tbpt_id_for_idx(int idx) 
 {
+	DBUG_ENTER("ha_tapioca::get_tbpt_id_for_idx");
 	tapioca_table_session *tsession;
 	
 	if (idx >= table->s->keys && idx != MAX_KEY) return -1;
 	if (!(tsession = (tapioca_table_session *) my_hash_search(&thrloc->tsessions,
 			(uchar*) full_table_name, strlen(full_table_name))))
 	{
-		return -1;
+		DBUG_RETURN(-1);
 	}
 
-	return tsession->tbpt_ids[idx];
+	DBUG_RETURN(tsession->tbpt_ids[idx]);
 }
 
 int ha_tapioca::update_indexes(const uchar *old_data, const uchar *new_data)
 {
+	DBUG_ENTER("ha_tapioca::update_indexes");
 	int rv;
 	MY_BITMAP idx_map; 
 	my_bitmap_map idx_map_buf[bitmap_buffer_size(MAX_FIELDS)];
@@ -1084,17 +1089,17 @@ int ha_tapioca::update_indexes(const uchar *old_data, const uchar *new_data)
 			// One of the columns of this index has been written to
 			
 			rv = delete_from_index(old_data,i);
-			if (rv != BPTREE_OP_KEY_FOUND) return rv;
+			if (rv != BPTREE_OP_KEY_FOUND) DBUG_RETURN(rv);
 			
 			size_t new_row_sz;
 			uchar *new_row = construct_tapioca_row_buffer(new_data, &new_row_sz);
 			
 			rv = insert_to_index(new_data, i, new_row, new_row_sz);
-			if (rv != BPTREE_OP_SUCCESS) return rv;
+			if (rv != BPTREE_OP_SUCCESS) DBUG_RETURN(rv);
 			
 		}
 	}
-	return BPTREE_OP_SUCCESS;
+	DBUG_RETURN(BPTREE_OP_SUCCESS);
 	
 }
 
@@ -1184,6 +1189,7 @@ int ha_tapioca::delete_row(const uchar *buf)
 		assert(pk_sz == sizeof(uuid_t));
 		rv = tapioca_bptree_delete(thrloc->th, tbpt_id, pk, pk_sz,
 					   val, buf_sz); 
+		if(rv != BPTREE_OP_KEY_FOUND) DBUG_RETURN(-1);
 	}
 	
 	rv = convert_to_mysql_error(rv);
@@ -2483,10 +2489,10 @@ uchar * ha_tapioca::marshall_bptree_info(size_t *bsize)
 {
 	DBUG_ENTER("ha_tapioca::marshall_bptree_info");
 	int i;
-    /* creates buffer and serializer instance. */
-    msgpack_sbuffer *buffer = msgpack_sbuffer_new();
-    msgpack_packer *pck = msgpack_packer_new(buffer, msgpack_sbuffer_write);
-    msgpack_sbuffer_clear(buffer);
+	/* creates buffer and serializer instance. */
+	msgpack_sbuffer *buffer = msgpack_sbuffer_new();
+	msgpack_packer *pck = msgpack_packer_new(buffer, msgpack_sbuffer_write);
+	msgpack_sbuffer_clear(buffer);
 	struct tapioca_bptree_info* m;
 
 	msgpack_pack_int16(pck, tapioca_bptrees.records);
@@ -2502,10 +2508,10 @@ uchar * ha_tapioca::marshall_bptree_info(size_t *bsize)
 		msgpack_pack_int16(pck, m->is_pk);
 	}
 
-    msgpack_packer_free(pck);
-    *bsize = buffer->size;
+	msgpack_packer_free(pck);
+	*bsize = buffer->size;
 	uchar *p = (uchar *)buffer->data;
-    free(buffer);
+	free(buffer);
 	DBUG_RETURN(p);
 }
 
