@@ -19,8 +19,9 @@ TS=`date +%s`
 TRACEDIR=/tmp
 TRACE="n"
 LAUNCHWITH="nohup" 
-DEBUGPARAMS=d:t:i:O,$TRACEDIR/mysql-$TS.trace
-DEBUGPARAMS=
+#DEBUGPARAMS=d:g:n:t:i:O,$TRACEDIR/mysql-$TS.trace
+DEBUGPARAMS=d:g:n:t:i:o,$TRACEDIR/mysql-$TS.trace
+
 FINALPARAMS=
 PURGESCHEMADIR=
 DOPURGESCHEMA="n"

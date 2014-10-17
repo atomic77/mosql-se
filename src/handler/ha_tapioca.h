@@ -201,6 +201,8 @@ private:
     inline bool table_has_pk() ;
     void handle_varchar(KEY_PART_INFO *key_part, uchar **k, const uchar *buf);
 	int get_max_row_len();
+    uchar * get_rowid_for_row_sequential(const uchar *buf, int32_t *buf_sz,
+						  bool incl_header);
 public:
     ha_tapioca(handlerton *hton, TABLE_SHARE *table_arg);
     ~ha_tapioca()
@@ -255,7 +257,7 @@ public:
 
     uint max_supported_keys() const
     {
-        return 9;
+        return 96;
     }
 
     uint max_supported_key_parts() const
